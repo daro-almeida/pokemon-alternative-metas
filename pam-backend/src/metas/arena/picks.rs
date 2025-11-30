@@ -17,14 +17,14 @@ fn load_arena_config() -> Result<ArenaConfig, DataError> {
         .iter()
         .map(|(k, v)| {
             let num = k
-                .parse::<u32>()
+                .parse::<usize>()
                 .map_err(|_| DataError::Format(format!("points_to_bucket: k: {}", k)))?;
             let bucket = v
                 .as_u64()
                 .ok_or(DataError::Format(format!("points_to_bucket v: {}", v)))?;
-            Ok((num, bucket as u32))
+            Ok((num, bucket as usize))
         })
-        .collect::<Result<HashMap<u32, u32>, DataError>>()?;
+        .collect::<Result<HashMap<usize, usize>, DataError>>()?;
 
     let quotas = config["quotas"]
         .as_array()
@@ -33,9 +33,9 @@ fn load_arena_config() -> Result<ArenaConfig, DataError> {
         .map(|quota| {
             Ok(quota
                 .as_u64()
-                .ok_or(DataError::Format(format!("{}", quota)))? as u32)
+                .ok_or(DataError::Format(format!("{}", quota)))? as usize)
         })
-        .collect::<Result<Vec<u32>, DataError>>()?;
+        .collect::<Result<Vec<usize>, DataError>>()?;
 
     let num_picks = quotas.iter().sum();
     let num_buckets = quotas.len();
@@ -47,9 +47,9 @@ fn load_arena_config() -> Result<ArenaConfig, DataError> {
         .map(|num_options| {
             Ok(num_options
                 .as_u64()
-                .ok_or(DataError::Format(format!("{}", num_options)))? as u32)
+                .ok_or(DataError::Format(format!("{}", num_options)))? as usize)
         })
-        .collect::<Result<Vec<u32>, DataError>>()?;
+        .collect::<Result<Vec<usize>, DataError>>()?;
 
     Ok(ArenaConfig {
         points_to_bucket,
@@ -60,14 +60,14 @@ fn load_arena_config() -> Result<ArenaConfig, DataError> {
     })
 }
 
-fn load_arena_pool(config: &ArenaConfig) -> Result<HashMap<u32, Vec<Pokemon>>, DataError> {
+fn load_arena_pool(config: &ArenaConfig) -> Result<HashMap<usize, Vec<Pokemon>>, DataError> {
     let mut points_pool = read_to_json("src/data/arena/draft_points.json")?
         .as_object()
         .ok_or(DataError::Format("arena/draft_points.json".into()))?
         .iter()
         .map(|(k, v)| {
             let num = k
-                .parse::<u32>()
+                .parse::<usize>()
                 .map_err(|_| DataError::Format(format!("{}", k)))?;
 
             let pokemons: Vec<Pokemon> = v
@@ -85,7 +85,7 @@ fn load_arena_pool(config: &ArenaConfig) -> Result<HashMap<u32, Vec<Pokemon>>, D
 
             Ok((num, pokemons))
         })
-        .collect::<Result<HashMap<u32, Vec<Pokemon>>, DataError>>()?;
+        .collect::<Result<HashMap<usize, Vec<Pokemon>>, DataError>>()?;
 
     let exceptions: Vec<String> = read_to_json("src/data/arena/exceptions.json")?
         .as_array()
@@ -106,7 +106,7 @@ fn load_arena_pool(config: &ArenaConfig) -> Result<HashMap<u32, Vec<Pokemon>>, D
 
     let pool = points_pool.into_iter().try_fold(
         HashMap::new(),
-        |mut acc: HashMap<u32, Vec<Pokemon>>, (points, pokes)| {
+        |mut acc: HashMap<usize, Vec<Pokemon>>, (points, pokes)| {
             let bucket = *config
                 .points_to_bucket
                 .get(&points)
@@ -122,7 +122,7 @@ fn load_arena_pool(config: &ArenaConfig) -> Result<HashMap<u32, Vec<Pokemon>>, D
 
 static ARENA_CONFIG: Lazy<ArenaConfig> = Lazy::new(|| load_arena_config().unwrap());
 
-static ARENA_POOL: Lazy<HashMap<u32, Vec<Pokemon>>> =
+static ARENA_POOL: Lazy<HashMap<usize, Vec<Pokemon>>> =
     Lazy::new(|| load_arena_pool(&ARENA_CONFIG).unwrap());
 
 fn read_to_json(path: &str) -> Result<Value, DataError> {
@@ -131,16 +131,11 @@ fn read_to_json(path: &str) -> Result<Value, DataError> {
 }
 
 struct ArenaConfig {
-    points_to_bucket: HashMap<u32, u32>,
-    options_per_bucket: Vec<u32>,
-    quotas: Vec<u32>,
-    num_picks: u32,
+    points_to_bucket: HashMap<usize, usize>,
+    options_per_bucket: Vec<usize>,
+    quotas: Vec<usize>,
+    num_picks: usize,
     num_buckets: usize,
-}
-
-#[derive(Deserialize)]
-pub struct ShowPicksParams {
-    user: String,
 }
 
 #[derive(Serialize)]
@@ -149,21 +144,25 @@ pub struct Pick {
     options: Vec<&'static Pokemon>,
 }
 
+#[derive(Deserialize)]
+pub struct ShowPicksParams {
+    user: String,
+}
+
 pub(crate) async fn show_picks(
     Query(params): Query<ShowPicksParams>,
 ) -> Result<Json<Pick>, DataError> {
     let user = params.user;
-    println!("User is: {}", user);
+    dbg!(user);
 
-    // random number between 1 and 19
-    //let bucket = rand::rng().random_range(0..=5);
+    let bucket = rand::rng().random_range(0..ARENA_CONFIG.num_buckets);
 
     let pick = Pick {
         pick_num: 1,
         options: ARENA_POOL
-            .get(&5)
+            .get(&bucket)
             .unwrap()
-            .choose_multiple(&mut rand::rng(), 10000)
+            .choose_multiple(&mut rand::rng(), ARENA_CONFIG.options_per_bucket[bucket])
             .collect::<Vec<&Pokemon>>(),
     };
 

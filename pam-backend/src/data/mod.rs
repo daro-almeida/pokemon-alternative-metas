@@ -4,9 +4,11 @@ use serde::Serialize;
 use serde_json::Value;
 use thiserror::Error;
 
+const POKEDEX_PATH: &str = "src/data/pokedex.json";
+
 static POKEDEX: Lazy<Value> = Lazy::new(|| {
     let file =
-        std::fs::read_to_string("src/data/pokedex.json").expect("Failed to read pokedex.json");
+        std::fs::read_to_string(POKEDEX_PATH).expect("Failed to read pokedex.json");
 
     serde_json::from_str(&file).expect("Failed to parse pokedex.json")
 });
