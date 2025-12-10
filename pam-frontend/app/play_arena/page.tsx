@@ -5,7 +5,7 @@ import Image from "next/image";
 export default async function Page() {
   const user = "sheesh";
   const res = await fetch(
-    `http://localhost:3001/arena/show_picks?user=${user}`,
+    `http://localhost:8000/arena/show_picks?user=${user}`,
     {
       cache: "no-store",
     }

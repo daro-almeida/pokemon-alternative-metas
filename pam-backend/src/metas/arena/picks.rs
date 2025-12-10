@@ -1,10 +1,16 @@
 use std::collections::HashMap;
 
-use axum::{Json, extract::Query};
+use axum::{
+    Json,
+    extract::{Query, State},
+};
+use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 use rand::{self, Rng, seq::IndexedRandom};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sqlx::{FromRow, Pool, Postgres};
+use uuid::Uuid;
 
 use crate::data::{DataError, Pokemon};
 
@@ -117,7 +123,19 @@ fn load_arena_pool(config: &ArenaConfig) -> Result<HashMap<usize, Vec<Pokemon>>,
         },
     )?;
 
+    for i in 0..pool.len() {
+        dbg!(i, pool[&i].len());
+    }
+
     Ok(pool)
+}
+
+struct ArenaConfig {
+    points_to_bucket: HashMap<usize, usize>,
+    options_per_bucket: Vec<usize>,
+    quotas: Vec<usize>,
+    num_picks: usize,
+    num_buckets: usize,
 }
 
 static ARENA_CONFIG: Lazy<ArenaConfig> = Lazy::new(|| load_arena_config().unwrap());
@@ -130,12 +148,13 @@ fn read_to_json(path: &str) -> Result<Value, DataError> {
     Ok(serde_json::from_str(&file)?)
 }
 
-struct ArenaConfig {
-    points_to_bucket: HashMap<usize, usize>,
-    options_per_bucket: Vec<usize>,
-    quotas: Vec<usize>,
-    num_picks: usize,
-    num_buckets: usize,
+#[derive(Debug, Serialize, Deserialize)]
+struct RunInfo {
+    username: String,
+    //created_at: DateTime<Utc>,
+    wins: i32,
+    losses: i32,
+    pool: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -149,12 +168,56 @@ pub struct ShowPicksParams {
     user: String,
 }
 
+async fn get_user_current_run(
+    pool: &Pool<Postgres>,
+    username: &String,
+) -> Result<Option<RunInfo>, sqlx::Error> {
+    Ok(sqlx::query_as!(
+        RunInfo,
+        r#"
+        SELECT 
+            r.username,
+            ar.wins,
+            ar.losses,
+            COALESCE(ARRAY_AGG(at.pokemon ORDER BY at.pick_no) FILTER (WHERE at.pokemon IS NOT NULL), '{}') as "pool!"
+        FROM runs r
+        INNER JOIN arena_runs ar ON r.run_id = ar.run_id
+        LEFT JOIN arena_teams at ON r.run_id = at.run_id AND r.username = at.username
+        WHERE r.username = $1 AND r.finished = false
+        GROUP BY r.run_id, r.username, r.created_at, r.finished, ar.wins, ar.losses
+        "#,
+        username
+    )
+    .fetch_optional(pool)
+    .await?)
+}
+
+async fn get_user_options(
+    pool: &Pool<Postgres>,
+    username: &String,
+) -> Result<Vec<String>, sqlx::Error> {
+    Ok(sqlx::query_scalar!(
+        r#"
+        SELECT pokemon
+        FROM arena_picks
+        WHERE username = $1
+        ORDER BY option_no
+        "#,
+        username
+    )
+    .fetch_all(pool)
+    .await?)
+}
+
 pub(crate) async fn show_picks(
+    State(pool): State<Pool<Postgres>>,
     Query(params): Query<ShowPicksParams>,
 ) -> Result<Json<Pick>, DataError> {
-    let user = params.user;
-    dbg!(user);
+    dbg!(&params.user);
 
+    let run_info = get_user_current_run(&pool, &params.user).await?;
+    let options = get_user_options(&pool, &params.user).await?.iter().map(|s| Pokemon::try_new(s.clone())).collect::<Result<Vec<Pokemon>, DataError>>()?;
+    
     let bucket = rand::rng().random_range(0..ARENA_CONFIG.num_buckets);
 
     let pick = Pick {

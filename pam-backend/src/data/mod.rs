@@ -27,6 +27,9 @@ pub enum DataError {
 
     #[error("Value not found: {0}")]
     NotFound(String),
+
+    #[error("SQL error: {0}")]
+    Sql(#[from] sqlx::Error),
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -110,5 +113,9 @@ impl Pokemon {
 
     pub fn has_evo(&self) -> bool {
         !self.evos.is_empty()
+    }
+
+    pub fn is_mega(&self) -> bool {
+        self.name.contains("-Mega")
     }
 }

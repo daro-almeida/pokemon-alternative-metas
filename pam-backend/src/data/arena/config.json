@@ -20,6 +20,7 @@
     "18": 5,
     "19": 5
   },
-  "options_per_bucket": [9,9,6,6,3,3],
-  "quotas": [1, 2, 3, 3, 2, 1]
+  "options_per_bucket": [9,6,6,6,3,3],
+  "quotas": [3, 2, 2, 2, 2, 1],
+  "pool_ratios": [24, 9, 6, 6, 3, 3]
 }
