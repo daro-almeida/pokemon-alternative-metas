@@ -1,18 +1,26 @@
-use axum::Router;
 use dotenvy::dotenv;
 
-mod db;
-mod data;
-mod metas;
+pub mod adapters;
+pub mod application;
+pub mod domain;
+pub mod infra;
+
+use infra::app::create_app;
+use infra::setup::init_app_state;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> anyhow::Result<()> {
     dotenv().ok();
 
-    let pool = db::init_db().await.expect("Failed to connect to database");
+    let app_state = init_app_state().await?;
 
-    let app = Router::new().nest("/arena", metas::arena::router()).with_state(pool);
+    let app = create_app(app_state);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:8000").await.unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:3001")
+        .await
+        .unwrap();
+
     axum::serve(listener, app).await.unwrap();
+
+    Ok(())
 }

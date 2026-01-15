@@ -1,4 +1,6 @@
 {
+  "num_picks" : 12,
+  "num_buckets" : 6,
   "points_to_bucket": {
     "1": 0,
     "2": 0,
@@ -21,6 +23,5 @@
     "19": 5
   },
   "options_per_bucket": [9,6,6,6,3,3],
-  "quotas": [3, 2, 2, 2, 2, 1],
-  "pool_ratios": [24, 9, 6, 6, 3, 3]
+  "quotas": [3, 2, 2, 2, 2, 1]
 }
