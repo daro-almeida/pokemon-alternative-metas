@@ -205,7 +205,8 @@ impl ArenaPersistence for PostgresPersistence {
         option_no: usize,
         pick_no: usize,
         num_picks: usize,
-    ) -> AppResult<()> {
+        pokedex: &'static HashMap<String, Pokemon>,
+    ) -> AppResult<(bool, Bucket, &'static Pokemon)> {
         let mut tx = self.pool.begin().await?;
 
         let row = sqlx::query!(
@@ -231,6 +232,8 @@ impl ArenaPersistence for PostgresPersistence {
             .map(|row| (row.bucket as Bucket, row.pokemon_ids))
             .ok_or_else(|| AppError::NotFound("Pick not available".to_owned()))?;
 
+        let poke_id = &options[option_no];
+
         sqlx::query!(
             r#"
         INSERT INTO arena_teams (run_id, pick_no, pokemon, bucket)
@@ -238,13 +241,15 @@ impl ArenaPersistence for PostgresPersistence {
         "#,
             run_id,
             pick_no as i32,
-            options[option_no],
+            poke_id,
             bucket as i32
         )
         .execute(&mut *tx)
         .await?;
 
-        if pick_no == num_picks {
+        let finished = pick_no == num_picks;
+
+        if finished {
             sqlx::query!(
                 r#"
             UPDATE arena_runs
@@ -259,6 +264,6 @@ impl ArenaPersistence for PostgresPersistence {
 
         tx.commit().await?;
 
-        Ok(())
+        Ok((finished, bucket, pokedex.get(poke_id).ok_or_else(|| AppError::Database(format!("{} not in pokedex", poke_id)))?))
     }
 }

@@ -39,7 +39,8 @@ pub trait ArenaPersistence: Send + Sync {
         option_no: usize,
         pick_no: usize,
         num_picks: usize,
-    ) -> AppResult<()>;
+        pokedex: &'static HashMap<String, Pokemon>,
+    ) -> AppResult<(bool, Bucket, &'static Pokemon)>;
 }
 
 #[derive(Deserialize)]
@@ -92,21 +93,26 @@ impl Arena {
     }
 
     pub async fn do_pick(&self, username: &str, option_no: usize) -> AppResult<Option<Pick>> {
-        let run_info = self.get_run_info(username).await?;
+        let mut run_info = self.get_run_info(username).await?;
         if run_info.finished_draft {
             return Err(AppError::NotFound(
                 "Draft finished. No picks available.".to_owned(),
             ));
         }
 
-        self.persistence
+        let (finished, bucket, pokemon) = self.persistence
             .pick_option(
                 &run_info.run_id,
                 option_no,
                 run_info.team.len() + 1,
                 self.config.num_picks,
+                self.pokedex
             )
             .await?;
+
+        run_info.team.push(pokemon);
+        run_info.team_buckets.push(bucket);
+        run_info.finished_draft = finished;
 
         self.get_pick(&run_info).await
     }
