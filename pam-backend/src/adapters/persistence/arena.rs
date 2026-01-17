@@ -1,74 +1,101 @@
+use std::collections::HashMap;
+
 use async_trait::async_trait;
-use sqlx::FromRow;
+use sqlx::{FromRow, types::time::PrimitiveDateTime};
 use uuid::Uuid;
 
 use crate::{
     adapters::persistence::PostgresPersistence,
     application::{AppError, AppResult, use_cases::arena::ArenaPersistence},
-    domain::arena::ArenaRunInfo,
+    domain::{
+        arena::{ArenaRunInfo, Bucket},
+        pokemon::Pokemon,
+    },
 };
 
-#[derive(Debug, FromRow)]
-pub struct ArenaRun {
-    run_id: Uuid,
-    wins: i32,
-    losses: i32,
-}
-
-#[derive(Debug, FromRow)]
-pub struct ArenaTeam {
-    run_id: Uuid,
-    username: String,
-    pick_no: i32,
-    pokemon: String,
-}
-
-#[derive(Debug, FromRow)]
-pub struct ArenaPick {
-    username: String,
-    option_no: i32,
-    pokemon: String,
+#[derive(FromRow, Debug)]
+pub struct ArenaRunInfoDb {
+    pub run_id: Uuid,
+    pub username: String,
+    pub created_at: PrimitiveDateTime,
+    pub wins: i32,
+    pub losses: i32,
+    pub finished_draft: bool,
+    pub team: Vec<String>,
+    pub team_buckets: Vec<i32>,
 }
 
 #[async_trait]
 impl ArenaPersistence for PostgresPersistence {
-    async fn get_user_current_run(&self, username: &str) -> AppResult<Option<ArenaRunInfo>> {
-        Ok(sqlx::query_as!(
-            ArenaRunInfo,
+    async fn get_user_current_run(
+        &self,
+        username: &str,
+        pokedex: &'static HashMap<String, Pokemon>,
+    ) -> AppResult<Option<ArenaRunInfo>> {
+        let run_db = sqlx::query_as!(
+            ArenaRunInfoDb,
             r#"
             SELECT 
                 r.run_id,
                 r.username,
+                r.created_at,
                 ar.wins,
                 ar.losses,
-                COALESCE(ARRAY_AGG(at.pokemon ORDER BY at.pick_no) FILTER (WHERE at.pokemon IS NOT NULL), '{}') as "pool!",
-                COALESCE(ARRAY_AGG(at.bucket ORDER BY at.pick_no) FILTER (WHERE at.bucket IS NOT NULL), '{}') as "pool_buckets!"
+                ar.finished_draft,
+                COALESCE(ARRAY_AGG(at.pokemon ORDER BY at.pick_no) FILTER (WHERE at.pokemon IS NOT NULL), '{}') as "team!",
+                COALESCE(ARRAY_AGG(at.bucket ORDER BY at.pick_no) FILTER (WHERE at.bucket IS NOT NULL), '{}') as "team_buckets!"
             FROM runs r
             INNER JOIN arena_runs ar ON r.run_id = ar.run_id
-            LEFT JOIN arena_teams at ON r.run_id = at.run_id AND r.username = at.username
+            LEFT JOIN arena_teams at ON r.run_id = at.run_id AND r.run_id = at.run_id
             WHERE r.username = $1 AND r.finished = false
-            GROUP BY r.run_id, r.username, r.created_at, r.finished, ar.wins, ar.losses
+            GROUP BY r.run_id, r.username, r.created_at, r.finished, ar.wins, ar.losses, ar.finished_draft
             "#,
             username
         )
         .fetch_optional(&self.pool)
         .await
-        .map_err(AppError::from)?)
+        .map_err(AppError::from)?;
+
+        match run_db {
+            Some(run_db) => {
+                let team = run_db
+                    .team
+                    .iter()
+                    .map(|poke_id| {
+                        pokedex.get(poke_id).ok_or_else(|| {
+                            AppError::Database(format!("{} not in pokedex", poke_id))
+                        })
+                    })
+                    .collect::<AppResult<Vec<&'static Pokemon>>>()?;
+
+                Ok(Some(ArenaRunInfo {
+                    run_id: run_db.run_id,
+                    created_at: run_db.created_at,
+                    wins: run_db.wins as u32,
+                    losses: run_db.losses as u32,
+                    finished_draft: run_db.finished_draft,
+                    team,
+                    team_buckets: run_db.team_buckets.iter().map(|&b| b as Bucket).collect(),
+                }))
+            }
+            None => Ok(None),
+        }
     }
 
-    async fn create_run(pool: &Pool<Postgres>, username: &String) -> Result<Pick, DataError> {
-        let mut tx = pool.begin().await?;
+    async fn create_run(&self, username: &str) -> AppResult<ArenaRunInfo> {
+        let mut tx = self.pool.begin().await?;
 
-        let run_id = sqlx::query_scalar!(
+        let (run_id, created_at) = sqlx::query!(
             r#"
         INSERT INTO runs (username)
         VALUES ($1)
-        RETURNING run_id
+        RETURNING run_id, created_at
         "#,
             username
         )
         .fetch_one(&mut *tx)
-        .await?;
+        .await
+        .map(|row| (row.run_id, row.created_at))?;
 
         sqlx::query!(
             r#"
@@ -82,91 +109,142 @@ impl ArenaPersistence for PostgresPersistence {
 
         tx.commit().await?;
 
-        let run_info = ArenaRunInfoDb {
+        Ok(ArenaRunInfo {
             run_id,
-            username: username.clone(),
+            created_at,
             wins: 0,
             losses: 0,
-            pool: Vec::new(),
-            pool_buckets: Vec::new(),
-        };
-
-        generate_pick(&pool, &run_info, username).await
+            finished_draft: false,
+            team: Vec::new(),
+            team_buckets: Vec::new(),
+        })
     }
 
-    async fn generate_pick(
-        pool: &Pool<Postgres>,
-        run_info: &ArenaRunInfoDb,
-        username: &String,
-    ) -> Result<Option<Pick>, DataError> {
-        let mut tx: sqlx::Transaction<'_, Postgres> = pool.begin().await?;
-
-        let bucket_counts: HashMap<usize, usize> =
-            run_info
-                .pool_buckets
-                .iter()
-                .fold(HashMap::new(), |mut map, bucket| {
-                    *map.entry((*bucket).try_into().unwrap()).or_insert(0usize) += 1;
-                    map
-                });
-
-        let bucket = ARENA_CONFIG
-            .quotas
-            .iter()
-            .enumerate()
-            .map(|(b, q)| std::iter::repeat_n(b, q - bucket_counts.get(&b).unwrap_or(&0usize)))
-            .flatten()
-            .choose(&mut rand::rng())
-            .unwrap();
-
-        let options = ARENA_POOL
-            .get(&bucket)
-            .unwrap()
-            //.filter(|p| if run_info.pool.iter().any(|p2| ))
-            .choose_multiple(&mut rand::rng(), ARENA_CONFIG.options_per_bucket[bucket])
-            .cloned()
-            .collect::<Vec<Pokemon>>();
-
+    async fn insert_options(
+        &self,
+        run_id: &Uuid,
+        bucket: Bucket,
+        options: &[&'static Pokemon],
+    ) -> AppResult<()> {
         let option_nos: Vec<i32> = (0..options.len()).map(|i| i as i32).collect();
-        let pokemon_ids: Vec<String> = options.iter().map(|p| p.id.clone()).collect();
+        let ids = options
+            .iter()
+            .map(|p| p.id.to_owned())
+            .collect::<Vec<String>>();
 
         sqlx::query!(
             r#"
-        INSERT INTO arena_picks (username, option_no, pokemon)
-        SELECT $1, * FROM UNNEST($2::int[], $3::text[])
+        INSERT INTO arena_picks (run_id, bucket, option_no, pokemon)
+        SELECT $1, $2, * FROM UNNEST($3::int[], $4::text[])
         "#,
-            username,
+            run_id,
+            bucket as i32,
             &option_nos,
-            pokemon_ids.as_slice()
+            &ids,
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn get_run_options(
+        &self,
+        run_id: &Uuid,
+        pokedex: &'static HashMap<String, Pokemon>,
+    ) -> AppResult<Option<(Bucket, Vec<&'static Pokemon>)>> {
+        let row = sqlx::query!(
+            r#"
+        SELECT 
+            bucket,
+            ARRAY_AGG(pokemon ORDER BY option_no) as "pokemon_ids!"
+        FROM arena_picks
+        WHERE run_id = $1
+        GROUP BY bucket
+        LIMIT 1
+        "#,
+            run_id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(|row| {
+            let bucket = row.bucket as Bucket;
+            let pokemon_options = row
+                .pokemon_ids
+                .iter()
+                .map(|poke_id| {
+                    pokedex
+                        .get(poke_id)
+                        .ok_or_else(|| AppError::Database(format!("{} not in pokedex", poke_id)))
+                })
+                .collect::<AppResult<Vec<&'static Pokemon>>>()?;
+
+            Ok((bucket, pokemon_options))
+        })
+        .transpose()
+    }
+
+    async fn pick_option(
+        &self,
+        run_id: &Uuid,
+        option_no: usize,
+        pick_no: usize,
+        num_picks: usize,
+    ) -> AppResult<()> {
+        let mut tx = self.pool.begin().await?;
+
+        let row = sqlx::query!(
+            r#"
+        WITH deleted AS (
+            DELETE FROM arena_picks
+            WHERE run_id = $1
+            RETURNING run_id, bucket, pokemon, option_no
+        )
+        SELECT 
+            bucket,
+            ARRAY_AGG(pokemon ORDER BY option_no) as "pokemon_ids!"
+        FROM deleted
+        GROUP BY run_id, bucket
+        LIMIT 1
+        "#,
+            run_id
+        )
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        let (bucket, options) = row
+            .map(|row| (row.bucket as Bucket, row.pokemon_ids))
+            .ok_or_else(|| AppError::NotFound("Pick not available".to_owned()))?;
+
+        sqlx::query!(
+            r#"
+        INSERT INTO arena_teams (run_id, pick_no, pokemon, bucket)
+        VALUES ($1, $2, $3, $4)
+        "#,
+            run_id,
+            pick_no as i32,
+            options[option_no],
+            bucket as i32
         )
         .execute(&mut *tx)
         .await?;
 
+        if pick_no == num_picks {
+            sqlx::query!(
+                r#"
+            UPDATE arena_runs
+            SET finished_draft = TRUE
+            WHERE run_id = $1
+            "#,
+                run_id
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
+
         tx.commit().await?;
 
-        Ok(Pick {
-            pick_num: run_info.pool.len() as u64 + 1,
-            options,
-        })
-    }
-
-    async fn get_user_options(
-        pool: &Pool<Postgres>,
-        username: &String,
-    ) -> Result<Vec<Pokemon>, DataError> {
-        Ok(sqlx::query_scalar!(
-            r#"
-        SELECT pokemon
-        FROM arena_picks
-        WHERE username = $1
-        ORDER BY option_no
-        "#,
-            username
-        )
-        .fetch_all(pool)
-        .await?
-        .iter()
-        .map(|s| Pokemon::try_new(s.clone()))
-        .collect::<Result<Vec<Pokemon>, DataError>>()?)
+        Ok(())
     }
 }

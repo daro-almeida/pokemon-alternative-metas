@@ -5,16 +5,13 @@ import Image from "next/image";
 export default async function Page() {
   const user = "sheesh";
   const res = await fetch(
-    `http://localhost:8000/arena/show_picks?user=${user}`,
-    {
-      cache: "no-store",
-    }
+    `http://localhost:3001/api/arena/${user}/options`,
   );
 
-   if (!res.ok) {
-      console.log(await res.text());
-      throw new Error(res.statusText);
-    }
+  if (!res.ok) {
+    console.log(await res.text());
+    throw new Error(res.statusText);
+  }
 
   const pick = await res.json();
   console.log(pick);
@@ -60,7 +57,7 @@ export default async function Page() {
                       priority
                     />
                   </div>
-                ) : null
+                ) : null,
               )}
             </div>
           </Card>

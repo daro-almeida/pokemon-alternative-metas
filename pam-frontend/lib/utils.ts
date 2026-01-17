@@ -7,7 +7,6 @@ export function cn(...inputs: ClassValue[]) {
 
 export type Pokemon = {
   id: string;
-  num: number;
   name: string;
   types: [string, string?];
 };

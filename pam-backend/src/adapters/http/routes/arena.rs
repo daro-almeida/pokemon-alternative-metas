@@ -2,68 +2,47 @@ use std::sync::Arc;
 
 use axum::{
     Json, Router,
-    extract::{Query, State},
+    extract::{Path, State},
+    response::IntoResponse,
     routing::{get, post},
 };
-use serde::Serialize;
+use serde::Deserialize;
 
 use crate::{
     adapters::http::app_state::AppState,
     application::{AppResult, use_cases::arena::Arena},
-    domain::pokemon::Pokemon,
 };
 
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/show_picks", get(show_current_run))
-        .route("/pick", post(pick))
+        .route("/{username}/run", get(show_run))
+        .route("/{username}/options", get(show_options))
+        .route("/{username}/pick", post(do_pick))
 }
 
-#[derive(Serialize)]
-pub struct Pick {
-    pick_num: u64,
-    options: Vec<&'static Pokemon>,
-}
-
-async fn show_current_run(
+async fn show_run(
     State(arena): State<Arc<Arena>>,
-    Query(user): Query<String>,
-) -> AppResult<Json<Pick>> {
-
-    let pick = match get_user_current_run(&pool, &params.user).await? {
-        Some(run_info) => {
-            let options = get_user_options(&pool, &params.user).await?;
-            if options.is_empty() {
-                generate_pick(&pool, &run_info, &params.user).await?
-            } else {
-                Pick {
-                    pick_num: run_info.pool.len() as u64 + 1,
-                    options,
-                }
-            }
-        }
-        None => create_run(&pool, &params.user).await?,
-    };
-
-    Ok(Json(pick))
+    Path(username): Path<String>,
+) -> AppResult<impl IntoResponse> {
+    Ok(Json(arena.show_run(&username).await?))
 }
 
-async fn pick(
+async fn show_options(
     State(arena): State<Arc<Arena>>,
-    Json((username, option)): Json<(String, i32)>,
-) -> Result<Json<Pick>, StatusCode> {
-    let pick = match get_user_current_run(&pool, &username).await {
-        Some(run_info) => {
-            let options = get_user_options(&pool, &username).await?;
-            if options.is_empty() || options.len() <= option as usize {
-                StatusCode::NOT_FOUND
-            } else {
-                commit_option(&pool, &run_info, &username, &options[option as usize]).await?;
-                generate_pick(&pool, &run_info, &params.user).await?
-            }
-        }
-        None => StatusCode::NOT_FOUND,
-    }?;
+    Path(username): Path<String>,
+) -> AppResult<impl IntoResponse> {
+    Ok(Json(arena.show_options(&username).await?))
+}
 
-    Ok(Json(pick))
+#[derive(Deserialize)]
+pub struct ChoosePickRequest {
+    option_no: usize,
+}
+
+async fn do_pick(
+    State(arena): State<Arc<Arena>>,
+    Path(username): Path<String>,
+    Json(req): Json<ChoosePickRequest>,
+) -> AppResult<impl IntoResponse> {
+    Ok(Json(arena.do_pick(&username, req.option_no).await?))
 }

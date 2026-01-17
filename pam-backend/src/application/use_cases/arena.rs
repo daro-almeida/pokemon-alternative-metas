@@ -1,15 +1,44 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, ops::Not, sync::Arc};
 
 use async_trait::async_trait;
+use rand::seq::IteratorRandom;
 use serde::Deserialize;
+use uuid::Uuid;
 
 use crate::{
-    application::AppResult, domain::{ArenaRunInfo, pokemon::Pokemon},
+    application::{AppError, AppResult},
+    domain::{
+        arena::{ArenaRunInfo, Bucket, Pick},
+        pokemon::Pokemon,
+    },
 };
 
 #[async_trait]
 pub trait ArenaPersistence: Send + Sync {
-    async fn get_user_current_run(&self, username: &str) -> AppResult<Option<ArenaRunInfo>>;
+    async fn create_run(&self, username: &str) -> AppResult<ArenaRunInfo>;
+    async fn get_user_current_run(
+        &self,
+        username: &str,
+        pokedex: &'static HashMap<String, Pokemon>,
+    ) -> AppResult<Option<ArenaRunInfo>>;
+    async fn get_run_options(
+        &self,
+        run_id: &Uuid,
+        pokedex: &'static HashMap<String, Pokemon>,
+    ) -> AppResult<Option<(Bucket, Vec<&'static Pokemon>)>>;
+    async fn insert_options(
+        &self,
+        run_id: &Uuid,
+        bucket: usize,
+        options: &[&'static Pokemon],
+    ) -> AppResult<()>;
+    async fn pick_option(
+        &self,
+        run_id: &Uuid,
+        option_no: usize,
+        pick_no: usize,
+        num_picks: usize,
+    ) -> AppResult<()>;
 }
 
 #[derive(Deserialize)]
@@ -22,24 +51,131 @@ pub struct ArenaConfig {
 }
 
 pub struct Arena {
-    pool: HashMap<usize, Vec<&'static Pokemon>>,
+    pokedex: &'static HashMap<String, Pokemon>,
+    bucket_pools: HashMap<usize, Vec<&'static Pokemon>>,
     persistence: Arc<dyn ArenaPersistence>,
     config: ArenaConfig,
 }
 
 impl Arena {
     pub fn new(
-        pool: HashMap<usize, Vec<&'static Pokemon>>,
+        pokedex: &'static HashMap<String, Pokemon>,
+        bucket_pools: HashMap<usize, Vec<&'static Pokemon>>,
         persistence: Arc<dyn ArenaPersistence>,
         config: ArenaConfig,
     ) -> Self {
         Self {
-            pool,
+            pokedex,
+            bucket_pools,
             persistence,
             config,
         }
     }
 
-    pub async fn show_picks(&self, username: &str) -> AppResult<Pick> {
+    pub async fn show_run(&self, username: &str) -> AppResult<(ArenaRunInfo, Option<Pick>)> {
+        let run_info = self.get_run_info(username).await?;
+        let pick_opt = self.get_pick(&run_info).await?;
+
+        Ok((run_info, pick_opt))
+    }
+
+    pub async fn show_options(&self, username: &str) -> AppResult<Option<Pick>> {
+        let run_info = self.get_run_info(username).await?;
+
+        self.get_pick(&run_info).await
+    }
+
+    pub async fn do_pick(&self, username: &str, option_no: usize) -> AppResult<Option<Pick>> {
+        let run_info = self.get_run_info(username).await?;
+        if run_info.finished_draft {
+            return Err(AppError::NotFound(
+                "Draft finished. No picks available.".to_owned(),
+            ));
+        }
+
+        self.persistence
+            .pick_option(
+                &run_info.run_id,
+                option_no,
+                run_info.team.len() + 1,
+                self.config.num_picks,
+            )
+            .await?;
+
+        self.get_pick(&run_info).await
+    }
+
+    async fn get_run_info(&self, username: &str) -> AppResult<ArenaRunInfo> {
+        match self
+            .persistence
+            .get_user_current_run(username, self.pokedex)
+            .await?
+        {
+            Some(run) => Ok(run),
+            None => self.persistence.create_run(username).await,
+        }
+    }
+
+    async fn get_pick(&self, run_info: &ArenaRunInfo) -> AppResult<Option<Pick>> {
+        if run_info.finished_draft {
+            return Ok(None);
+        }
+
+        if let Some((_, options)) = self
+            .persistence
+            .get_run_options(&run_info.run_id, self.pokedex)
+            .await?
+        {
+            Ok(Some(Pick {
+                pick_num: run_info.team.len() + 1,
+                options,
+            }))
+        } else {
+            Ok(Some(self.generate_pick(&run_info).await?))
+        }
+    }
+
+    async fn generate_pick(&self, run_info: &ArenaRunInfo) -> AppResult<Pick> {
+        let bucket_counts: HashMap<usize, usize> =
+            run_info
+                .team_buckets
+                .iter()
+                .fold(HashMap::new(), |mut map, bucket| {
+                    *map.entry((*bucket).try_into().unwrap()).or_insert(0usize) += 1;
+                    map
+                });
+
+        let bucket = self
+            .config
+            .quotas
+            .iter()
+            .enumerate()
+            .map(|(b, q)| std::iter::repeat_n(b, q - bucket_counts.get(&b).unwrap_or(&0usize)))
+            .flatten()
+            .choose(&mut rand::rng())
+            .ok_or_else(|| {
+                AppError::Internal("No quotas left (should be unreachable)".to_owned())
+            })?;
+
+        let options = self
+            .bucket_pools
+            .get(&bucket)
+            .ok_or_else(|| AppError::Internal(format!("No bucket {}", bucket)))?
+            .iter()
+            .filter(|p| {
+                !run_info.team.contains(p)
+                    && (!p.is_mega() || run_info.team.iter().any(|p2| p2.is_mega()).not())
+            })
+            .copied()
+            .choose_multiple(&mut rand::rng(), self.config.options_per_bucket[bucket]);
+
+        self.persistence
+            .insert_options(&run_info.run_id, bucket, &options)
+            .await?;
+
+        Ok(Pick {
+            pick_num: run_info.team.len() + 1,
+            options,
+        })
     }
 }

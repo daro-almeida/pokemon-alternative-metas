@@ -1,0 +1,3 @@
+
+ALTER TABLE arena_runs
+ADD COLUMN finished_draft BOOLEAN NOT NULL DEFAULT FALSE;

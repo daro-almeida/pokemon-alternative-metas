@@ -1,7 +1,6 @@
 use crate::{adapters::persistence::PostgresPersistence, infra::db::init_pg_db};
 
 pub mod app;
-pub mod config;
 pub mod db;
 pub mod setup;
 

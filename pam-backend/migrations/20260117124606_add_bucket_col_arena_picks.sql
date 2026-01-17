@@ -1,0 +1,1 @@
+ALTER TABLE arena_picks ADD COLUMN bucket INT NOT NULL DEFAULT 0;

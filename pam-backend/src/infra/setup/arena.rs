@@ -83,7 +83,7 @@ pub fn load_arena(
     persistence: Arc<dyn ArenaPersistence>,
 ) -> anyhow::Result<Arena> {
     let config = load_arena_config()?;
-    let pool = load_arena_pool(&config, pokedex)?;
+    let arena_pool = load_arena_pool(&config, pokedex)?;
 
-    Ok(Arena::new(pool, persistence, config))
+    Ok(Arena::new(pokedex, arena_pool, persistence, config))
 }
