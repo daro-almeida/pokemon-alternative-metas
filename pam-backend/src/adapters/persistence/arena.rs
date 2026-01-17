@@ -27,6 +27,20 @@ pub struct ArenaRunInfoDb {
 
 #[async_trait]
 impl ArenaPersistence for PostgresPersistence {
+    async fn delete_unfinished_draft_runs(&self) -> AppResult<()> {
+        sqlx::query!(
+            r#"
+        DELETE FROM runs
+        USING arena_runs
+        WHERE runs.run_id = arena_runs.run_id
+        AND arena_runs.finished_draft = false
+        "#
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
     async fn get_user_current_run(
         &self,
         username: &str,

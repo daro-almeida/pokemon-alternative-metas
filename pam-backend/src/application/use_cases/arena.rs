@@ -15,6 +15,7 @@ use crate::{
 
 #[async_trait]
 pub trait ArenaPersistence: Send + Sync {
+    async fn delete_unfinished_draft_runs(&self) -> AppResult<()>;
     async fn create_run(&self, username: &str) -> AppResult<ArenaRunInfo>;
     async fn get_user_current_run(
         &self,
@@ -70,6 +71,11 @@ impl Arena {
             persistence,
             config,
         }
+    }
+
+    pub async fn init(&self) -> AppResult<()> {
+        self.persistence.delete_unfinished_draft_runs().await?;
+        Ok(())
     }
 
     pub async fn show_run(&self, username: &str) -> AppResult<(ArenaRunInfo, Option<Pick>)> {
