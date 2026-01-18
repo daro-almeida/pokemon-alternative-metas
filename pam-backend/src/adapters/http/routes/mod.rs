@@ -10,7 +10,6 @@ pub fn router() -> Router<AppState> {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        eprintln!("{:?}", self);
         tracing::error!("{}", self);
         match self {
             AppError::Database(error) => {
