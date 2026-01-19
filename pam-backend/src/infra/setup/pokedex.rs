@@ -13,39 +13,44 @@ pub(crate) static POKEDEX: Lazy<HashMap<String, Pokemon>> =
 
 fn load_pokedex() -> anyhow::Result<HashMap<String, Pokemon>> {
     #[derive(Deserialize)]
-struct PokemonData {
-    name: String,
-    types: Vec<String>,
-    #[serde(default)]
-    evos: Vec<String>,
-}
+    struct PokemonData {
+        name: String,
+        types: Vec<String>,
+        base_species: Option<String>,
+        #[serde(default)]
+        evos: Vec<String>,
+    }
 
-let raw: HashMap<String, Value> = serde_json::from_reader(fs::File::open(POKEDEX_PATH)?)?;
+    let raw: HashMap<String, Value> = serde_json::from_reader(fs::File::open(POKEDEX_PATH)?)?;
 
-raw
-    .into_iter() 
-    .filter_map(|(id, data)| {
-        if data.get("isCosmeticForme").and_then(|v| v.as_bool()).unwrap_or(false) {
-            return None;
-        }
+    raw.into_iter()
+        .filter_map(|(id, data)| {
+            if data
+                .get("isCosmeticForme")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+            {
+                return None;
+            }
 
-        // Try deserializing as PokemonData
-        let poke_data = match serde_json::from_value::<PokemonData>(data) {
-            Ok(poke_data) => poke_data,
-            Err(e) => return Some(Err(anyhow::anyhow!(e))),
-        };
+            // Try deserializing as PokemonData
+            let poke_data = match serde_json::from_value::<PokemonData>(data) {
+                Ok(poke_data) => poke_data,
+                Err(e) => return Some(Err(anyhow::anyhow!(e))),
+            };
 
-        let pokemon = Pokemon {
-            id: id.clone(), 
-            name: poke_data.name,
-            types: (
-                poke_data.types.get(0).cloned().unwrap_or_default(),
-                poke_data.types.get(1).cloned(),
-            ),
-            evos: poke_data.evos,
-        };
-        
-        Some(Ok((id, pokemon))) 
-    })
-    .collect::<anyhow::Result<HashMap<String, Pokemon>>>()
+            let pokemon = Pokemon {
+                id: id.clone(),
+                name: poke_data.name,
+                types: (
+                    poke_data.types.get(0).cloned().unwrap_or_default(),
+                    poke_data.types.get(1).cloned(),
+                ),
+                base_species: poke_data.base_species,
+                evos: poke_data.evos,
+            };
+
+            Some(Ok((id, pokemon)))
+        })
+        .collect::<anyhow::Result<HashMap<String, Pokemon>>>()
 }

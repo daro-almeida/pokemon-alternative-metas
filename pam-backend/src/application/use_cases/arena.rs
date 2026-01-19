@@ -100,13 +100,14 @@ impl Arena {
             ));
         }
 
-        let (finished, bucket, pokemon) = self.persistence
+        let (finished, bucket, pokemon) = self
+            .persistence
             .pick_option(
                 &run_info.run_id,
                 option_no,
                 run_info.team.len() + 1,
                 self.config.num_picks,
-                self.pokedex
+                self.pokedex,
             )
             .await?;
 
@@ -148,6 +149,17 @@ impl Arena {
     }
 
     async fn generate_pick(&self, run_info: &ArenaRunInfo) -> AppResult<Pick> {
+        fn include_in_pool(run_info: &ArenaRunInfo, pokemon: &'static Pokemon) -> bool {
+            !run_info.team.contains(&pokemon)
+                && (pokemon.base_species.is_none()
+                    || run_info
+                        .team
+                        .iter()
+                        .any(|p| pokemon.same_base_species(p))
+                        .not())
+                && (!pokemon.is_mega() || run_info.team.iter().any(|p| p.is_mega()).not())
+        }
+
         let bucket_counts: HashMap<usize, usize> =
             run_info
                 .team_buckets
@@ -174,10 +186,7 @@ impl Arena {
             .get(&bucket)
             .ok_or_else(|| AppError::Internal(format!("No bucket {}", bucket)))?
             .iter()
-            .filter(|p| {
-                !run_info.team.contains(p)
-                    && (!p.is_mega() || run_info.team.iter().any(|p2| p2.is_mega()).not())
-            })
+            .filter(|p| include_in_pool(run_info, p))
             .copied()
             .choose_multiple(&mut rand::rng(), self.config.options_per_bucket[bucket]);
 

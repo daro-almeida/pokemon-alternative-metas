@@ -6,6 +6,8 @@ pub struct Pokemon {
     pub name: String,
     pub types: (String, Option<String>),
     #[serde(skip_serializing)]
+    pub base_species: Option<String>,
+    #[serde(skip_serializing)]
     pub evos: Vec<String>,
 }
 
@@ -16,6 +18,10 @@ impl Pokemon {
 
     pub fn is_mega(&self) -> bool {
         self.name.contains("-Mega")
+    }
+
+    pub fn same_base_species(&self, other: &Self) -> bool {
+        self.base_species.is_none() || self.base_species == other.base_species
     }
 }
 
