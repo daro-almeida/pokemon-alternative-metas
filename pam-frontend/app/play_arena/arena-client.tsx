@@ -1,12 +1,21 @@
 "use client";
 
-import { Card } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { PokemonSetsButton } from "@/components/PokemonSetsButton";
 import { home_centered_sprite, Pokemon } from "@/lib/utils";
 import Image from "next/image";
 import { useState, useTransition } from "react";
 import { getArenaRun, makePick } from "./actions";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 
 interface Pick {
   pick_num: number;
@@ -48,75 +57,90 @@ export default function ArenaClient({
     });
   };
 
+  // Placeholder match data
+  const matches = [
+    { opponent: "Trainer_Alex", result: "2-1", won: true },
+    { opponent: "Champion_Blake", result: "2-0", won: true },
+    { opponent: "Master_Riley", result: "1-2", won: false },
+  ];
+
   return (
     <div className="flex flex-col gap-3 lg:h-[calc(100vh-6rem)] lg:overflow-hidden">
       <h1 className="text-center text-3xl font-extrabold tracking-tight">
-        Arena Draft
+        Arena
       </h1>
 
       <div className="flex flex-col lg:flex-row gap-4 flex-1 lg:min-h-0">
         {/* POOL */}
         <aside className="w-full lg:w-64 xl:w-72 shrink-0 lg:h-full">
-          <Card className="h-full max-h-96 lg:max-h-none flex flex-col p-3 bg-linear-to-b from-card/90 to-card border-border/60 backdrop-blur-sm">
-            <div className="flex justify-between items-center shrink-0 mb-1">
-              <h2 className="text-lg font-bold tracking-tight">Pool</h2>
-              {!pick && (
-                <span className="text-sm font-medium text-muted-foreground">
-                  {runInfo.wins}W – {runInfo.losses}L
+          <Card className="h-full max-h-96 lg:max-h-none flex flex-col">
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <CardTitle className="text-lg">Pool</CardTitle>
+                <span className="text-sm text-muted-foreground">
+                  <span className="text-sm text-muted-foreground">
+                    {new Date(runInfo.created_at).toLocaleString(undefined, {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })}
+                  </span>
                 </span>
-              )}
-            </div>
+              </div>
+            </CardHeader>
+            <CardContent className="flex-1 min-h-0 p-0 px-3 pb-3">
+              <ScrollArea className="h-full pr-3">
+                {runInfo.team.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-6 text-sm">
+                    No Pokémon drafted yet
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {runInfo.team.map((pokemon, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center gap-2 rounded-lg border p-2 bg-muted/40"
+                      >
+                        <div className="relative w-12 h-12 shrink-0">
+                          <Image
+                            src={home_centered_sprite(pokemon)}
+                            alt={pokemon.name}
+                            fill
+                            className="object-contain"
+                          />
+                        </div>
 
-            <div className="flex-1 overflow-y-auto space-y-2 pr-1 min-h-0">
-              {runInfo.team.length === 0 ? (
-                <p className="text-muted-foreground text-center py-6 text-sm">
-                  No Pokémon drafted yet
-                </p>
-              ) : (
-                runInfo.team.map((pokemon, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/40 p-2"
-                  >
-                    <div className="relative w-12 h-12 shrink-0">
-                      <Image
-                        src={home_centered_sprite(pokemon)}
-                        alt={pokemon.name}
-                        fill
-                        className="object-contain"
-                      />
-                    </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="font-semibold truncate text-sm">
+                            {pokemon.name}
+                          </div>
+                          <div className="flex gap-1">
+                            {pokemon.types.map(
+                              (type, i) =>
+                                type && (
+                                  <div key={i} className="relative w-10 h-6">
+                                    <Image
+                                      src={`https://play.pokemonshowdown.com/sprites/types/${type}.png`}
+                                      alt={type}
+                                      fill
+                                      className="object-contain"
+                                    />
+                                  </div>
+                                ),
+                            )}
+                          </div>
+                        </div>
 
-                    <div className="min-w-0 flex-1">
-                      <div className="font-semibold truncate text-sm">
-                        {pokemon.name}
+                        <PokemonSetsButton pokemon={pokemon} />
                       </div>
-                      <div className="flex gap-1">
-                        {pokemon.types.map(
-                          (type, i) =>
-                            type && (
-                              <div key={i} className="relative w-10 h-6">
-                                <Image
-                                  src={`https://play.pokemonshowdown.com/sprites/types/${type}.png`}
-                                  alt={type}
-                                  fill
-                                  className="object-contain"
-                                />
-                              </div>
-                            ),
-                        )}
-                      </div>
-                    </div>
-
-                    <PokemonSetsButton pokemon={pokemon} />
+                    ))}
                   </div>
-                ))
-              )}
-            </div>
+                )}
+              </ScrollArea>
+            </CardContent>
           </Card>
         </aside>
 
-        {/* PICKS */}
+        {/* PICKS OR LADDER */}
         <section className="flex-1 lg:h-full flex flex-col lg:min-h-0 lg:overflow-hidden">
           {pick ? (
             <>
@@ -130,7 +154,7 @@ export default function ArenaClient({
                   {pick.options.map((pokemon, index) => (
                     <Card
                       key={index}
-                      className={`flex flex-col border-border/60 bg-card/80 backdrop-blur-sm p-3 ${
+                      className={`flex flex-col p-3 ${
                         isPending ? "opacity-50 pointer-events-none" : ""
                       }`}
                     >
@@ -187,7 +211,7 @@ export default function ArenaClient({
                   {pick.options.map((pokemon, index) => (
                     <Card
                       key={index}
-                      className={`flex flex-col border-border/60 bg-card/80 backdrop-blur-sm p-3 ${
+                      className={`flex flex-col p-3 ${
                         isPending ? "opacity-50 pointer-events-none" : ""
                       }`}
                     >
@@ -239,12 +263,83 @@ export default function ArenaClient({
               </div>
             </>
           ) : (
-            <div className="flex items-center justify-center py-12">
-              <Card className="p-8 text-center bg-card/80 backdrop-blur-sm">
-                <h2 className="text-xl font-bold mb-2">Draft Complete!</h2>
-                <p className="text-muted-foreground">
-                  Your team is ready to battle.
-                </p>
+            <div className="flex flex-col h-full gap-4 lg:overflow-y-auto p-2">
+              {/* Instructions Card */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Draft Complete!</CardTitle>
+                  <CardDescription>
+                    Build teams from your drafted pool and compete on the
+                    ladder. <strong>3 losses and you&apos;re out!</strong> Each
+                    match is <strong>Bo3</strong>.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex gap-3">
+                    <Button className="flex-1" size="lg">
+                      Queue for Match
+                    </Button>
+                    <Button variant="destructive" size="lg">
+                      Abandon Run
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Match History */}
+              <Card className="flex-1 min-h-0 flex flex-col">
+                <CardHeader>
+                  <div className="flex justify-between items-center">
+                    <CardTitle className="text-lg">Match History</CardTitle>
+                    <Badge variant="secondary" className="text-xs">
+                      {runInfo.wins} – {runInfo.losses}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <Separator />
+                <CardContent className="flex-1 min-h-0 p-0">
+                  <ScrollArea className="h-full p-4">
+                    {matches.length === 0 ? (
+                      <p className="text-muted-foreground text-center py-8 text-sm">
+                        No matches played yet
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {matches.map((match, index) => (
+                          <div
+                            key={index}
+                            className={`flex items-center justify-between p-3 rounded-lg border ${
+                              match.won
+                                ? "bg-green-500/10 border-green-500/30"
+                                : "bg-red-500/10 border-red-500/30"
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={`w-2 h-2 rounded-full ${
+                                  match.won ? "bg-green-500" : "bg-red-500"
+                                }`}
+                              />
+                              <span className="font-medium">
+                                vs {match.opponent}
+                              </span>
+                            </div>
+                            <Badge
+                              variant={match.won ? "default" : "destructive"}
+                              className={
+                                match.won
+                                  ? "bg-green-500 hover:bg-green-600"
+                                  : ""
+                              }
+                            >
+                              {match.result}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </ScrollArea>
+                </CardContent>
               </Card>
             </div>
           )}
