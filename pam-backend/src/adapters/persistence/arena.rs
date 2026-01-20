@@ -1,15 +1,18 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use sqlx::{FromRow, types::time::PrimitiveDateTime};
+use sqlx::FromRow;
+use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
     adapters::persistence::PostgresPersistence,
-    application::{AppError, AppResult, use_cases::arena::ArenaPersistence},
+    application::{
+        AppError, AppResult,
+        use_cases::arena::{ArenaPersistence, META_STR},
+    },
     domain::{
-        arena::{ArenaRunInfo, Bucket},
-        pokemon::Pokemon,
+        TimeFormat, arena::{ArenaRunInfo, Bucket}, pokemon::Pokemon
     },
 };
 
@@ -17,7 +20,7 @@ use crate::{
 pub struct ArenaRunInfoDb {
     pub run_id: Uuid,
     pub username: String,
-    pub created_at: PrimitiveDateTime,
+    pub created_at: OffsetDateTime,
     pub wins: i32,
     pub losses: i32,
     pub finished_draft: bool,
@@ -84,7 +87,8 @@ impl ArenaPersistence for PostgresPersistence {
 
                 Ok(Some(ArenaRunInfo {
                     run_id: run_db.run_id,
-                    created_at: run_db.created_at,
+                    created_at: TimeFormat::new(run_db.created_at)
+                        .map_err(|err| AppError::Database(err.to_string()))?,
                     wins: run_db.wins as u32,
                     losses: run_db.losses as u32,
                     finished_draft: run_db.finished_draft,
@@ -97,7 +101,7 @@ impl ArenaPersistence for PostgresPersistence {
     }
 
     async fn create_run(&self, username: &str) -> AppResult<ArenaRunInfo> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx: sqlx::Transaction<'_, sqlx::Postgres> = self.pool.begin().await?;
 
         let (run_id, created_at) = sqlx::query!(
             r#"
@@ -125,13 +129,48 @@ impl ArenaPersistence for PostgresPersistence {
 
         Ok(ArenaRunInfo {
             run_id,
-            created_at,
+            created_at: TimeFormat::new(created_at)
+                .map_err(|err| AppError::Database(err.to_string()))?,
             wins: 0,
             losses: 0,
             finished_draft: false,
             team: Vec::new(),
             team_buckets: Vec::new(),
         })
+    }
+
+    async fn abandon_run(&self, run_id: &Uuid, username: &str, elo_change: i32) -> AppResult<()> {
+        let mut tx: sqlx::Transaction<'_, sqlx::Postgres> = self.pool.begin().await?;
+
+        sqlx::query!(
+            r#"
+        UPDATE runs
+        SET finished = TRUE
+        WHERE run_id = $1
+        "#,
+            run_id
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query!(
+            r#"
+        INSERT INTO leaderboards (meta, username, elo)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (meta, username) 
+        DO UPDATE SET 
+            elo = leaderboards.elo + EXCLUDED.elo
+        "#,
+            META_STR,
+            username,
+            elo_change,
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(())
     }
 
     async fn insert_options(
@@ -264,6 +303,12 @@ impl ArenaPersistence for PostgresPersistence {
 
         tx.commit().await?;
 
-        Ok((finished, bucket, pokedex.get(poke_id).ok_or_else(|| AppError::Database(format!("{} not in pokedex", poke_id)))?))
+        Ok((
+            finished,
+            bucket,
+            pokedex
+                .get(poke_id)
+                .ok_or_else(|| AppError::Database(format!("{} not in pokedex", poke_id)))?,
+        ))
     }
 }

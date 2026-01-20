@@ -28,3 +28,17 @@ export async function makePick(username: string, optionNo: number) {
 
   return res.json();
 }
+
+export async function abandonRun(username: string) {
+  const res = await fetch(
+    `http://localhost:3001/api/arena/${username}/abandon`,
+    {
+      method: "POST",
+      cache: "no-store",
+    },
+  );
+
+  if (!res.ok) {
+    throw new Error(`Failed to abandon run: ${res.statusText}`);
+  }
+}

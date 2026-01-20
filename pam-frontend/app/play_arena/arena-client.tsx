@@ -11,11 +11,12 @@ import { PokemonSetsButton } from "@/components/PokemonSetsButton";
 import { home_centered_sprite, Pokemon } from "@/lib/utils";
 import Image from "next/image";
 import { useState, useTransition } from "react";
-import { getArenaRun, makePick } from "./actions";
+import { abandonRun, getArenaRun, makePick } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { useRouter } from "next/navigation";
 
 interface Pick {
   pick_num: number;
@@ -44,10 +45,11 @@ export default function ArenaClient({
 }: ArenaClientProps) {
   const [runInfo, setRunInfo] = useState(initialRunInfo);
   const [pick, setPick] = useState<Pick | null>(initialPick);
-  const [isPending, startTransition] = useTransition();
+  const [isPendingPick, startPickTransition] = useTransition();
+  const router = useRouter();
 
   const handlePick = (optionNo: number) => {
-    startTransition(async () => {
+    startPickTransition(async () => {
       const newPick = await makePick(username, optionNo);
       setPick(newPick);
 
@@ -57,12 +59,30 @@ export default function ArenaClient({
     });
   };
 
+  const handleAbandon = async () => {
+    startPickTransition(async () => {
+      try {
+        await abandonRun(username);
+
+        const [updatedRunInfo, updatedPick] = await getArenaRun(username);
+        setRunInfo(updatedRunInfo);
+        setPick(updatedPick);
+
+        router.refresh();
+      } catch (error) {
+        console.error("Failed to abandon run:", error);
+      }
+    });
+  };
+
   // Placeholder match data
   const matches = [
     { opponent: "Trainer_Alex", result: "2-1", won: true },
     { opponent: "Champion_Blake", result: "2-0", won: true },
     { opponent: "Master_Riley", result: "1-2", won: false },
   ];
+
+  console.log(runInfo.created_at);
 
   return (
     <div className="flex flex-col gap-3 lg:h-[calc(100vh-6rem)] lg:overflow-hidden">
@@ -81,7 +101,6 @@ export default function ArenaClient({
                   <span className="text-sm text-muted-foreground">
                     {new Date(runInfo.created_at).toLocaleString(undefined, {
                       dateStyle: "medium",
-                      timeStyle: "short",
                     })}
                   </span>
                 </span>
@@ -113,11 +132,14 @@ export default function ArenaClient({
                           <div className="font-semibold truncate text-sm">
                             {pokemon.name}
                           </div>
-                          <div className="flex gap-1">
+                          <div className="flex gap-1 flex-wrap">
                             {pokemon.types.map(
                               (type, i) =>
                                 type && (
-                                  <div key={i} className="relative w-10 h-6">
+                                  <div
+                                    key={i}
+                                    className="relative w-10 h-6 shrink-0"
+                                  >
                                     <Image
                                       src={`https://play.pokemonshowdown.com/sprites/types/${type}.png`}
                                       alt={type}
@@ -155,7 +177,7 @@ export default function ArenaClient({
                     <Card
                       key={index}
                       className={`flex flex-col p-3 ${
-                        isPending ? "opacity-50 pointer-events-none" : ""
+                        isPendingPick ? "opacity-50 pointer-events-none" : ""
                       }`}
                     >
                       <div className="relative flex-1 w-full min-h-0">
@@ -212,7 +234,7 @@ export default function ArenaClient({
                     <Card
                       key={index}
                       className={`flex flex-col p-3 ${
-                        isPending ? "opacity-50 pointer-events-none" : ""
+                        isPendingPick ? "opacity-50 pointer-events-none" : ""
                       }`}
                     >
                       <div className="relative aspect-square w-full">
@@ -279,7 +301,11 @@ export default function ArenaClient({
                     <Button className="flex-1" size="lg">
                       Queue for Match
                     </Button>
-                    <Button variant="destructive" size="lg">
+                    <Button
+                      variant="destructive"
+                      size="lg"
+                      onClick={handleAbandon}
+                    >
                       Abandon Run
                     </Button>
                   </div>

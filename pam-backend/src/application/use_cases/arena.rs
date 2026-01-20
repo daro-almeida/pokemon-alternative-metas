@@ -13,10 +13,13 @@ use crate::{
     },
 };
 
+pub const META_STR: &str = "arena";
+
 #[async_trait]
 pub trait ArenaPersistence: Send + Sync {
     async fn delete_unfinished_draft_runs(&self) -> AppResult<()>;
     async fn create_run(&self, username: &str) -> AppResult<ArenaRunInfo>;
+    async fn abandon_run(&self, run_id: &Uuid, username: &str, elo_change: i32) -> AppResult<()>;
     async fn get_user_current_run(
         &self,
         username: &str,
@@ -86,10 +89,16 @@ impl Arena {
         Ok((run_info, pick_opt))
     }
 
-    pub async fn show_options(&self, username: &str) -> AppResult<Option<Pick>> {
-        let run_info = self.get_run_info(username).await?;
-
-        self.get_pick(&run_info).await
+    pub async fn abandon_run(&self, username: &str) -> AppResult<()> {
+        if let Some(run_info) = self
+            .persistence
+            .get_user_current_run(username, self.pokedex)
+            .await?
+        {
+            // TODO calc elos
+            self.persistence.abandon_run(&run_info.run_id, username, 0).await?;
+        }
+        Ok(())
     }
 
     pub async fn do_pick(&self, username: &str, option_no: usize) -> AppResult<Option<Pick>> {

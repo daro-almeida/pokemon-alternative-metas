@@ -16,8 +16,8 @@ use crate::{
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/{username}/run", get(show_run))
-        .route("/{username}/options", get(show_options))
         .route("/{username}/pick", post(do_pick))
+        .route("/{username}/abandon", post(abandon_run))
 }
 
 async fn show_run(
@@ -25,13 +25,6 @@ async fn show_run(
     Path(username): Path<String>,
 ) -> AppResult<impl IntoResponse> {
     Ok(Json(arena.show_run(&username).await?))
-}
-
-async fn show_options(
-    State(arena): State<Arc<Arena>>,
-    Path(username): Path<String>,
-) -> AppResult<impl IntoResponse> {
-    Ok(Json(arena.show_options(&username).await?))
 }
 
 #[derive(Deserialize)]
@@ -45,4 +38,12 @@ async fn do_pick(
     Json(req): Json<ChoosePickRequest>,
 ) -> AppResult<impl IntoResponse> {
     Ok(Json(arena.do_pick(&username, req.option_no).await?))
+}
+
+async fn abandon_run(
+    State(arena): State<Arc<Arena>>,
+    Path(username): Path<String>,
+) -> AppResult<impl IntoResponse> {
+    arena.abandon_run(&username).await?;
+    Ok(())
 }

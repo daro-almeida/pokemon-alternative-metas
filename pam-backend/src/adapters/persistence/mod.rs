@@ -22,13 +22,6 @@ pub mod arena;
 //     coil: i32,
 // }
 
-// #[derive(Debug, sqlx::Type)]
-// #[sqlx(type_name = "glicko1")]
-// pub struct Glicko1 {
-//     rating: i32,
-//     deviation: i32,
-// }
-
 #[derive(Clone)]
 pub struct PostgresPersistence {
     pool: Pool<Postgres>,
@@ -42,6 +35,12 @@ impl PostgresPersistence {
 
 impl From<sqlx::Error> for AppError {
     fn from(value: sqlx::Error) -> Self {
+        AppError::Database(value.to_string())
+    }
+}
+
+impl From<time::error::Format> for AppError { 
+    fn from(value: time::error::Format) -> Self {
         AppError::Database(value.to_string())
     }
 }
