@@ -6,7 +6,6 @@ export default function Home() {
   return (
     <section className="text-center space-y-8 py-20">
 
-      {/* HERO TEXT */}
       <div className="space-y-4">
         <h1 className="text-5xl font-bold tracking-tight">
           Pokémon Alternative Metas
@@ -16,7 +15,6 @@ export default function Home() {
         </p>
       </div>
 
-      {/* CARD GRID */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-4xl mx-auto">
         {metas.map((m) => (
           <Link key={m.meta} href={`/metas/${m.meta}`} className="group">

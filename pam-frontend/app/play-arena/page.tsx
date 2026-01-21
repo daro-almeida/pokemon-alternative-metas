@@ -5,6 +5,7 @@ export default async function Page() {
   const username = "sheesh";
 
   const [runInfo, pick] = await getArenaRun(username);
+  console.log(runInfo, pick);
 
   return (
     <ArenaClient
