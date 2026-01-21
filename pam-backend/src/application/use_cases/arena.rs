@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::Not, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 use rand::seq::IteratorRandom;
@@ -96,7 +96,9 @@ impl Arena {
             .await?
         {
             // TODO calc elos
-            self.persistence.abandon_run(&run_info.run_id, username, 0).await?;
+            self.persistence
+                .abandon_run(&run_info.run_id, username, 0)
+                .await?;
         }
         Ok(())
     }
@@ -159,13 +161,9 @@ impl Arena {
 
     async fn generate_pick(&self, run_info: &ArenaRunInfo) -> AppResult<Pick> {
         fn include_in_pool(run_info: &ArenaRunInfo, pokemon: &'static Pokemon) -> bool {
-            !run_info.team.contains(&pokemon)
-                && (run_info
-                        .team
-                        .iter()
-                        .any(|p| pokemon.same_base_species(p))
-                        .not())
-                && (!pokemon.is_mega() || run_info.team.iter().any(|p| p.is_mega()).not())
+            let all_diff_species = run_info.team.iter().all(|p| !pokemon.same_base_species(p));
+            let only_one_mega = !pokemon.is_mega() || run_info.team.iter().all(|p| !p.is_mega());
+            !run_info.team.contains(&pokemon) && all_diff_species && only_one_mega
         }
 
         let bucket_counts: HashMap<usize, usize> =
