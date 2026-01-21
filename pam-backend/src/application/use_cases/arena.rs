@@ -160,8 +160,7 @@ impl Arena {
     async fn generate_pick(&self, run_info: &ArenaRunInfo) -> AppResult<Pick> {
         fn include_in_pool(run_info: &ArenaRunInfo, pokemon: &'static Pokemon) -> bool {
             !run_info.team.contains(&pokemon)
-                && (pokemon.base_species.is_none()
-                    || run_info
+                && (run_info
                         .team
                         .iter()
                         .any(|p| pokemon.same_base_species(p))

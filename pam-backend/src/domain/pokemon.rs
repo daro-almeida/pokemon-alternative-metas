@@ -21,7 +21,15 @@ impl Pokemon {
     }
 
     pub fn same_base_species(&self, other: &Self) -> bool {
-        self.base_species.is_none() || self.base_species == other.base_species
+        self.base_species == other.base_species
+            || self
+                .base_species
+                .as_deref()
+                .is_some_and(|bs| bs == other.name)
+            || other
+                .base_species
+                .as_deref()
+                .is_some_and(|bs| bs == self.name)
     }
 }
 
