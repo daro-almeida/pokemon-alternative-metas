@@ -13,6 +13,7 @@ pub(crate) static POKEDEX: Lazy<HashMap<String, Pokemon>> =
 
 fn load_pokedex() -> anyhow::Result<HashMap<String, Pokemon>> {
     #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
     struct PokemonData {
         name: String,
         types: Vec<String>,
