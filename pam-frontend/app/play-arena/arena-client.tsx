@@ -18,6 +18,7 @@ import { PoolCard } from "@/components/arena/PoolCard";
 import { PickCard } from "@/components/arena/PickCard";
 import { MatchHistoryItem } from "@/components/arena/MatchHistoryItem";
 import { Pokemon } from "@/lib/types/pokemon";
+import { ARENA_NUM_PICKS } from "@/lib/constants";
 
 interface Pick {
   pick_num: number;
@@ -131,7 +132,7 @@ export default function ArenaClient({
           {pick ? (
             <>
               <h2 className="text-center text-lg sm:text-xl font-bold tracking-tight mb-2 shrink-0">
-                Pick {pick.pick_num} / 12
+                Pick {pick.pick_num} / {ARENA_NUM_PICKS}
               </h2>
 
               <div className="flex-1 lg:flex items-center justify-center min-h-0 p-1">

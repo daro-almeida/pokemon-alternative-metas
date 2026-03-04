@@ -1,0 +1,1 @@
+export const ARENA_NUM_PICKS = 12;
