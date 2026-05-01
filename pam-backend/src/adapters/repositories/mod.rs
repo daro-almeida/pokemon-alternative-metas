@@ -4,24 +4,6 @@ use crate::application::AppError;
 
 pub mod arena;
 
-// #[derive(Debug, FromRow)]
-// pub struct Run {
-//     run_id: Uuid,
-//     created_at: DateTime<Utc>,
-//     finished: bool,
-//     username: String,
-// }
-
-// #[derive(Debug, FromRow)]
-// pub struct LeaderboardEntry {
-//     meta: String,
-//     username: String,
-//     elo: i32,
-//     gxe: i32,
-//     glicko1: Glicko1,
-//     coil: i32,
-// }
-
 #[derive(Clone)]
 pub struct PostgresPersistence {
     pool: Pool<Postgres>,

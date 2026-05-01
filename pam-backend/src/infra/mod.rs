@@ -1,4 +1,4 @@
-use crate::{adapters::persistence::PostgresPersistence, infra::db::init_pg_db};
+use crate::{adapters::repositories::PostgresPersistence, infra::db::init_pg_db};
 
 pub mod app;
 pub mod db;

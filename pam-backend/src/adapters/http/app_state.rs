@@ -2,8 +2,7 @@ use std::sync::Arc;
 
 use axum::extract::FromRef;
 
-use crate::application::use_cases::arena::Arena;
-
+use crate::application::services::arena::service::Arena;
 #[derive(Clone)]
 pub struct AppState {
     pub arena: Arc<Arena>,

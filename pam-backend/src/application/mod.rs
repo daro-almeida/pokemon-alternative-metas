@@ -1,6 +1,7 @@
 use thiserror::Error;
 
-pub mod use_cases;
+pub mod services;
+pub mod repositories;
 
 #[derive(Error, Debug)]
 pub enum AppError {

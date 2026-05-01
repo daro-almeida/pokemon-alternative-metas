@@ -3,9 +3,12 @@ use axum::{Router, http::StatusCode, response::{IntoResponse, Response}};
 use crate::{adapters::http::app_state::AppState, application::AppError};
 
 pub mod arena;
+pub mod matchmaking;
 
 pub fn router() -> Router<AppState> {
-    Router::new().nest("/arena", arena::router())
+    Router::new()
+        .nest("/arena", arena::router())
+        //.nest("/matchmaking", matchmaking::router())
 }
 
 impl IntoResponse for AppError {

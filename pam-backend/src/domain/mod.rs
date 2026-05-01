@@ -1,4 +1,3 @@
-use anyhow::Context;
 use serde::Serialize;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
@@ -10,13 +9,17 @@ pub mod arena;
 pub struct TimeFormat(String);
 
 impl TimeFormat {
-    pub fn new(timestamp: OffsetDateTime) -> anyhow::Result<Self> {
-        Ok(Self(
-            timestamp.format(&Rfc3339).context("Invalid timestamp")?,
-        ))
-    }
-
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+}
+
+impl TryFrom<OffsetDateTime> for TimeFormat {
+    type Error = anyhow::Error;
+
+    fn try_from(value: OffsetDateTime) -> Result<Self, Self::Error> {
+        Ok(Self(
+            value.format(&Rfc3339).map_err(|err| anyhow::anyhow!(err))?,
+        ))
     }
 }

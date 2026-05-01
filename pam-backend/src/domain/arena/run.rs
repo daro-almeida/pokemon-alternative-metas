@@ -1,26 +1,11 @@
 use serde::Serialize;
 use uuid::Uuid;
 
-use crate::domain::{TimeFormat, pokemon::Pokemon};
+use crate::domain::{TimeFormat, arena::arena_match::ArenaMatch, pokemon::Pokemon};
 
 pub type Bucket = usize;
 
-#[derive(Debug, Serialize)]
-pub struct Pick {
-    pub pick_num: usize,
-    pub options: Vec<&'static Pokemon>,
-}
-
-
-#[derive(Debug, Serialize)]
-pub struct ArenaMatch {
-    pub opponent: String,
-    pub wins: u32,
-    pub losses: u32,
-    pub won: Option<bool>,
-}
-
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct ArenaRunInfo {
     #[serde(skip_serializing)]
     pub run_id: Uuid,

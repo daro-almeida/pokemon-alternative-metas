@@ -4,8 +4,7 @@ use anyhow::Context;
 use serde_json::Value;
 
 use crate::{
-    application::use_cases::arena::{Arena, ArenaConfig, ArenaPersistence},
-    domain::pokemon::Pokemon,
+    application::{repositories::arena::ArenaRepository, services::arena::{config::ArenaConfig, service::Arena}}, domain::pokemon::Pokemon
 };
 
 const CONFIG_PATH: &str = "data/arena/config.json";
@@ -80,10 +79,10 @@ fn load_arena_pool(
 
 pub fn load_arena(
     pokedex: &'static HashMap<String, Pokemon>,
-    persistence: Arc<dyn ArenaPersistence>,
+    repository: Arc<dyn ArenaRepository>,
 ) -> anyhow::Result<Arena> {
     let config = load_arena_config()?;
     let arena_pool = load_arena_pool(&config, pokedex)?;
 
-    Ok(Arena::new(pokedex, arena_pool, persistence, config))
+    Ok(Arena::new(pokedex, arena_pool, repository, config))
 }

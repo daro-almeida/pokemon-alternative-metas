@@ -1,64 +1,13 @@
 use std::{collections::HashMap, sync::Arc};
 
-use async_trait::async_trait;
 use rand::seq::IteratorRandom;
-use serde::Deserialize;
-use uuid::Uuid;
 
-use crate::{
-    application::{AppError, AppResult},
-    domain::{
-        arena::{ArenaRunInfo, Bucket, Pick},
-        pokemon::Pokemon,
-    },
-};
-
-pub const META_STR: &str = "arena";
-
-#[async_trait]
-pub trait ArenaPersistence: Send + Sync {
-    async fn delete_unfinished_draft_runs(&self) -> AppResult<()>;
-    async fn create_run(&self, username: &str) -> AppResult<ArenaRunInfo>;
-    async fn abandon_run(&self, run_id: &Uuid, username: &str, elo_change: i32) -> AppResult<()>;
-    async fn get_user_current_run(
-        &self,
-        username: &str,
-        pokedex: &'static HashMap<String, Pokemon>,
-    ) -> AppResult<Option<ArenaRunInfo>>;
-    async fn get_run_options(
-        &self,
-        run_id: &Uuid,
-        pokedex: &'static HashMap<String, Pokemon>,
-    ) -> AppResult<Option<(Bucket, Vec<&'static Pokemon>)>>;
-    async fn insert_options(
-        &self,
-        run_id: &Uuid,
-        bucket: usize,
-        options: &[&'static Pokemon],
-    ) -> AppResult<()>;
-    async fn pick_option(
-        &self,
-        run_id: &Uuid,
-        option_no: usize,
-        pick_no: usize,
-        num_picks: usize,
-        pokedex: &'static HashMap<String, Pokemon>,
-    ) -> AppResult<(bool, Bucket, &'static Pokemon)>;
-}
-
-#[derive(Deserialize)]
-pub struct ArenaConfig {
-    pub num_picks: usize,
-    pub num_buckets: usize,
-    pub points_to_bucket: HashMap<usize, usize>,
-    pub options_per_bucket: Vec<usize>,
-    pub quotas: Vec<usize>,
-}
+use crate::{application::{AppError, AppResult, repositories::arena::ArenaRepository, services::arena::config::ArenaConfig}, domain::{arena::{pick::Pick, run::ArenaRunInfo}, pokemon::Pokemon}};
 
 pub struct Arena {
     pokedex: &'static HashMap<String, Pokemon>,
     bucket_pools: HashMap<usize, Vec<&'static Pokemon>>,
-    persistence: Arc<dyn ArenaPersistence>,
+    persistence: Arc<dyn ArenaRepository>,
     config: ArenaConfig,
 }
 
@@ -66,7 +15,7 @@ impl Arena {
     pub fn new(
         pokedex: &'static HashMap<String, Pokemon>,
         bucket_pools: HashMap<usize, Vec<&'static Pokemon>>,
-        persistence: Arc<dyn ArenaPersistence>,
+        persistence: Arc<dyn ArenaRepository>,
         config: ArenaConfig,
     ) -> Self {
         Self {

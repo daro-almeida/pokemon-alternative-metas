@@ -1,49 +1,20 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use sqlx::FromRow;
-use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
-    adapters::persistence::PostgresPersistence,
+    adapters::repositories::{PostgresPersistence, arena::dao::{ArenaMatchDao, ArenaRunInfoDao}},
     application::{
-        AppError, AppResult,
-        use_cases::arena::{ArenaPersistence, META_STR},
+        AppError, AppResult, repositories::arena::ArenaRepository,
     },
     domain::{
-        TimeFormat,
-        arena::{ArenaMatch, ArenaRunInfo, Bucket},
-        pokemon::Pokemon,
+        TimeFormat, arena::{arena_match::ArenaMatch, run::{ArenaRunInfo, Bucket}}, pokemon::Pokemon
     },
 };
 
-#[derive(FromRow, Debug)]
-pub struct ArenaRunInfoDb {
-    pub run_id: Uuid,
-    pub username: String,
-    pub created_at: OffsetDateTime,
-    pub wins: i32,
-    pub losses: i32,
-    pub finished_draft: bool,
-    pub team: Vec<String>,
-    pub team_buckets: Vec<i32>,
-}
-
-#[derive(FromRow, Debug)]
-pub struct ArenaMatchDb {
-    pub match_id: Uuid,
-    pub run_id_1: Uuid,
-    pub run_id_2: Uuid,
-    pub finished: bool,
-    pub created_at: OffsetDateTime,
-    pub run_1_wins: i32,
-    pub run_2_wins: i32,
-    pub winner_run_id: Option<Uuid>,
-}
-
 #[async_trait]
-impl ArenaPersistence for PostgresPersistence {
+impl ArenaRepository for PostgresPersistence {
     async fn delete_unfinished_draft_runs(&self) -> AppResult<()> {
         sqlx::query!(
             r#"
@@ -66,7 +37,7 @@ impl ArenaPersistence for PostgresPersistence {
         let mut tx = self.pool.begin().await?;
 
         let run_db = sqlx::query_as!(
-            ArenaRunInfoDb,
+            ArenaRunInfoDao,
             r#"
             SELECT 
                 r.run_id,
@@ -90,8 +61,8 @@ impl ArenaPersistence for PostgresPersistence {
         .map_err(AppError::from)?;
 
         let result = match run_db {
-            Some(run_db) => {
-                let team = run_db
+            Some(run_dao) => {
+                let team = run_dao
                     .team
                     .iter()
                     .map(|poke_id| {
@@ -102,13 +73,13 @@ impl ArenaPersistence for PostgresPersistence {
                     .collect::<AppResult<Vec<&'static Pokemon>>>()?;
 
                 let matches_db = sqlx::query_as!(
-                    ArenaMatchDb,
+                    ArenaMatchDao,
                     r#"
                     SELECT * FROM arena_matches
                     WHERE run_id_1 = $1 OR run_id_2 = $1
                     ORDER BY created_at
                     "#,
-                    run_db.run_id
+                    run_dao.run_id
                 )
                 .fetch_all(&mut *tx)
                 .await
@@ -117,7 +88,7 @@ impl ArenaPersistence for PostgresPersistence {
                 let mut matches = Vec::new();
 
                 for match_db in matches_db {
-                    let (opponent_run_id, wins, losses) = if run_db.run_id == match_db.run_id_1 {
+                    let (opponent_run_id, wins, losses) = if run_dao.run_id == match_db.run_id_1 {
                         (
                             match_db.run_id_2,
                             match_db.run_2_wins as u32,
@@ -144,20 +115,19 @@ impl ArenaPersistence for PostgresPersistence {
                         opponent,
                         wins,
                         losses,
-                        won: match_db.winner_run_id.map(|wrid| run_db.run_id == wrid),
+                        won: match_db.winner_run_id.map(|wrid| run_dao.run_id == wrid),
                     });
                 }
 
                 Ok(Some(ArenaRunInfo {
-                    run_id: run_db.run_id,
-                    created_at: TimeFormat::new(run_db.created_at)
-                        .map_err(|err| AppError::Database(err.to_string()))?,
-                    wins: run_db.wins as u32,
-                    losses: run_db.losses as u32,
-                    finished_draft: run_db.finished_draft,
+                    run_id: run_dao.run_id,
+                    created_at: TimeFormat::try_from(run_dao.created_at).map_err(|err| AppError::Database(err.to_string()))?,
+                    wins: run_dao.wins as u32,
+                    losses: run_dao.losses as u32,
+                    finished_draft: run_dao.finished_draft,
                     team,
                     matches,
-                    team_buckets: run_db.team_buckets.iter().map(|&b| b as Bucket).collect(),
+                    team_buckets: run_dao.team_buckets.iter().map(|&b| b as Bucket).collect(),
                 }))
             }
             None => Ok(None),
@@ -197,7 +167,7 @@ impl ArenaPersistence for PostgresPersistence {
 
         Ok(ArenaRunInfo::new(
             run_id,
-            TimeFormat::new(created_at).map_err(|err| AppError::Database(err.to_string()))?,
+            TimeFormat::try_from(created_at).map_err(|err| AppError::Database(err.to_string()))?,
         ))
     }
 
@@ -215,20 +185,20 @@ impl ArenaPersistence for PostgresPersistence {
         .execute(&mut *tx)
         .await?;
 
-        sqlx::query!(
-            r#"
-        INSERT INTO leaderboards (meta, username, elo)
-        VALUES ($1, $2, $3)
-        ON CONFLICT (meta, username) 
-        DO UPDATE SET 
-            elo = leaderboards.elo + EXCLUDED.elo
-        "#,
-            META_STR,
-            username,
-            elo_change,
-        )
-        .execute(&mut *tx)
-        .await?;
+        // sqlx::query!(
+        //     r#"
+        // INSERT INTO leaderboards (meta, username, elo)
+        // VALUES ($1, $2, $3)
+        // ON CONFLICT (meta, username) 
+        // DO UPDATE SET 
+        //     elo = leaderboards.elo + EXCLUDED.elo
+        // "#,
+        //     META_STR,
+        //     username,
+        //     elo_change,
+        // )
+        // .execute(&mut *tx)
+        // .await?;
 
         tx.commit().await?;
 
