@@ -20,9 +20,3 @@ impl From<sqlx::Error> for AppError {
         AppError::Database(value.to_string())
     }
 }
-
-impl From<time::error::Format> for AppError { 
-    fn from(value: time::error::Format) -> Self {
-        AppError::Database(value.to_string())
-    }
-}
