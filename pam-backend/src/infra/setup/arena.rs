@@ -1,10 +1,14 @@
 use std::{collections::HashMap, fs, sync::Arc};
 
 use anyhow::Context;
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 use crate::{
-    application::{repositories::arena::ArenaRepository, services::arena::{config::ArenaConfig, service::Arena}}, domain::pokemon::Pokemon
+    application::{
+        repositories::arena::ArenaRepository,
+        services::arena::{config::ArenaConfig, service::Arena},
+    },
+    domain::pokemon::Pokemon,
 };
 
 const CONFIG_PATH: &str = "data/arena/config.json";
@@ -13,6 +17,27 @@ const EXCEPTIONS_PATH: &str = "data/arena/exceptions.json";
 
 fn load_arena_config() -> anyhow::Result<ArenaConfig> {
     Ok(serde_json::from_reader(fs::File::open(CONFIG_PATH)?)?)
+}
+
+fn extract_exceptions(
+    exceptions_json: &Map<String, Value>,
+    key: &str,
+) -> anyhow::Result<Vec<String>> {
+    Ok(exceptions_json
+        .get(key)
+        .context(format!("arena/exceptions.json: {key} key not found"))?
+        .as_array()
+        .context(format!(
+            "arena/exceptions.json: {key} value is not an array"
+        ))?
+        .iter()
+        .map(|pid| {
+            Ok(pid
+                .as_str()
+                .context("arena/exceptions.json: value in array is not string")?
+                .to_string())
+        })
+        .collect::<anyhow::Result<Vec<String>>>()?)
 }
 
 fn load_arena_pool(
@@ -47,27 +72,29 @@ fn load_arena_pool(
         .collect::<anyhow::Result<HashMap<usize, Vec<&Pokemon>>>>()?;
 
     let exceptions_json: Value = serde_json::from_reader(fs::File::open(EXCEPTIONS_PATH)?)?;
-    let exceptions: Vec<String> = exceptions_json
-        .as_array()
-        .context("arena/exceptions.json is not an array")?
-        .iter()
-        .map(|pid| {
-            Ok(pid
-                .as_str().context("arena/exceptions.json: array is not of strings")?
-                .into())
-        })
-        .collect::<anyhow::Result<Vec<String>>>()?;
+    let exceptions_json = exceptions_json
+        .as_object()
+        .context("arena/exceptions.json is not an object")?;
+
+    let include = extract_exceptions(exceptions_json, "include")?;
+    let exclude = extract_exceptions(exceptions_json, "exclude")?;
+    dbg!(&include);
+    dbg!(&exclude);
 
     draft_points_pool
-        .get_mut(&1).context("arena/draft_points.json: point 1 list missing")?
-        .retain(|p| !p.has_evo() || exceptions.contains(&p.id));
+        .get_mut(&1)
+        .context("arena/draft_points.json: point 1 list missing")?
+        .retain(|p| !exclude.contains(&p.id) && (!p.has_evo() || include.contains(&p.id)));
 
     let pool = draft_points_pool.into_iter().try_fold(
         HashMap::new(),
-        |mut acc: HashMap<usize, Vec<&Pokemon>>, (points, pokes)| -> anyhow::Result<HashMap<usize, Vec<&Pokemon>>> {
-            let bucket = config
-                .points_to_bucket
-                .get(&points).context(format!("arena/draft_points.json: point {} not in config", points))?;
+        |mut acc: HashMap<usize, Vec<&Pokemon>>,
+         (points, pokes)|
+         -> anyhow::Result<HashMap<usize, Vec<&Pokemon>>> {
+            let bucket = config.points_to_bucket.get(&points).context(format!(
+                "arena/draft_points.json: point {} not in config",
+                points
+            ))?;
 
             acc.entry(*bucket).or_default().extend(pokes);
             Ok(acc)
