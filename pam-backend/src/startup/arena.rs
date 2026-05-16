@@ -5,25 +5,22 @@ use serde_json::{Map, Value};
 
 use crate::{
     application::{
-        repositories::arena::ArenaRepository,
+        repositories::{arena::ArenaRepository, pokemon::PokemonRepository},
         services::arena::{config::ArenaConfig, service::Arena},
     },
     domain::pokemon::Pokemon,
+    startup::paths::{ARENA_CONFIG_PATH, ARENA_DRAFT_POINTS_PATH, ARENA_EXCEPTIONS_PATH},
 };
 
-const CONFIG_PATH: &str = "data/arena/config.json";
-const DRAFT_POINTS_PATH: &str = "data/arena/draft_points.json";
-const EXCEPTIONS_PATH: &str = "data/arena/exceptions.json";
-
 fn load_arena_config() -> anyhow::Result<ArenaConfig> {
-    Ok(serde_json::from_reader(fs::File::open(CONFIG_PATH)?)?)
+    Ok(serde_json::from_reader(fs::File::open(ARENA_CONFIG_PATH)?)?)
 }
 
 fn extract_exceptions(
     exceptions_json: &Map<String, Value>,
     key: &str,
 ) -> anyhow::Result<Vec<String>> {
-    Ok(exceptions_json
+    exceptions_json
         .get(key)
         .context(format!("arena/exceptions.json: {key} key not found"))?
         .as_array()
@@ -37,14 +34,15 @@ fn extract_exceptions(
                 .context("arena/exceptions.json: value in array is not string")?
                 .to_string())
         })
-        .collect::<anyhow::Result<Vec<String>>>()?)
+        .collect::<anyhow::Result<Vec<String>>>()
 }
 
-fn load_arena_pool(
+fn init_arena_pool(
     config: &ArenaConfig,
-    pokedex: &'static HashMap<String, Pokemon>,
+    pokemon_repository: Arc<dyn PokemonRepository>,
 ) -> anyhow::Result<HashMap<usize, Vec<&'static Pokemon>>> {
-    let draft_points_json: Value = serde_json::from_reader(fs::File::open(DRAFT_POINTS_PATH)?)?;
+    let draft_points_json: Value =
+        serde_json::from_reader(fs::File::open(ARENA_DRAFT_POINTS_PATH)?)?;
     let mut draft_points_pool = draft_points_json
         .as_object()
         .context("arena/draft_points.json is not an object")?
@@ -57,13 +55,13 @@ fn load_arena_pool(
                 .context("arena/draft_points.json: value is not an array")?
                 .iter()
                 .map(|poke_id| {
-                    Ok(pokedex
-                        .get(
+                    pokemon_repository
+                        .get_by_id(
                             poke_id
                                 .as_str()
                                 .context("arena/draft_points.json: arrays are not of strings")?,
                         )
-                        .context("arena/draft_points.json: pokemon not found in pokedex")?)
+                        .context("arena/draft_points.json: pokemon not found in pokedex")
                 })
                 .collect::<anyhow::Result<Vec<&Pokemon>>>()?;
 
@@ -71,15 +69,13 @@ fn load_arena_pool(
         })
         .collect::<anyhow::Result<HashMap<usize, Vec<&Pokemon>>>>()?;
 
-    let exceptions_json: Value = serde_json::from_reader(fs::File::open(EXCEPTIONS_PATH)?)?;
+    let exceptions_json: Value = serde_json::from_reader(fs::File::open(ARENA_EXCEPTIONS_PATH)?)?;
     let exceptions_json = exceptions_json
         .as_object()
         .context("arena/exceptions.json is not an object")?;
 
     let include = extract_exceptions(exceptions_json, "include")?;
     let exclude = extract_exceptions(exceptions_json, "exclude")?;
-    dbg!(&include);
-    dbg!(&exclude);
 
     draft_points_pool
         .get_mut(&1)
@@ -104,12 +100,12 @@ fn load_arena_pool(
     Ok(pool)
 }
 
-pub fn load_arena(
-    pokedex: &'static HashMap<String, Pokemon>,
-    repository: Arc<dyn ArenaRepository>,
-) -> anyhow::Result<Arena> {
+pub fn init_arena_service(
+    pokemon_repository: Arc<dyn PokemonRepository>,
+    arena_repository: Arc<dyn ArenaRepository>,
+) -> anyhow::Result<Arc<Arena>> {
     let config = load_arena_config()?;
-    let arena_pool = load_arena_pool(&config, pokedex)?;
+    let arena_pool = init_arena_pool(&config, pokemon_repository)?;
 
-    Ok(Arena::new(pokedex, arena_pool, repository, config))
+    Ok(Arc::new(Arena::new(config, arena_repository, arena_pool)))
 }

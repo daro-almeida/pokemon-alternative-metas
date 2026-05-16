@@ -7,7 +7,10 @@ use dashmap::DashMap;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
-use crate::{application::{AppResult, repositories::matchmaking::MatchmakingRepository}, domain::arena::{arena_match::ArenaMatch, run::ArenaRunInfo}};
+use crate::{
+    application::{AppResult, repositories::matchmaking::MatchmakingRepository},
+    domain::arena::{arena_match::ArenaMatch, run::ArenaRunInfo},
+};
 
 pub struct QueueEntry {
     pub run_info: ArenaRunInfo,
@@ -29,18 +32,18 @@ pub struct Matchmaking {
 }
 
 impl Matchmaking {
-    fn new(persistence: Arc<dyn MatchmakingRepository>) -> Self {
-        let matchmaking = Self {
+    pub fn new(persistence: Arc<dyn MatchmakingRepository>) -> Self {
+        Self {
             persistence,
             queue: Arc::new(DashMap::new()),
-        };
+        }
+    }
 
-        let mm_clone = matchmaking.clone();
+    pub fn start(&self) {
+        let this = self.clone();
         tokio::spawn(async move {
-            mm_clone.matchmaking_loop().await;
+            this.matchmaking_loop().await;
         });
-
-        matchmaking
     }
 
     async fn matchmaking_loop(&self) {
@@ -80,59 +83,72 @@ impl Matchmaking {
     }
 
     async fn try_make_matches(&self) {
-    let mut matched_runs = Vec::new();
-    
-    // Collect just the run_ids to reduce cloning
-    let run_ids: Vec<Uuid> = self.queue.iter().map(|e| *e.key()).collect();
-    
-    for i in 0..run_ids.len() {
-        if matched_runs.contains(&run_ids[i]) {
-            continue;
-        }
+        let mut matched_runs = Vec::new();
 
-        for j in (i + 1)..run_ids.len() {
-            if matched_runs.contains(&run_ids[j]) {
+        // Collect just the run_ids to reduce cloning
+        let run_ids: Vec<Uuid> = self.queue.iter().map(|e| *e.key()).collect();
+
+        for i in 0..run_ids.len() {
+            if matched_runs.contains(&run_ids[i]) {
                 continue;
             }
 
-            let run_id_1 = run_ids[i];
-            let run_id_2 = run_ids[j];
-            
-            // Get entries only when needed
-            let Some(entry_1) = self.queue.get(&run_id_1) else { continue };
-            let Some(entry_2) = self.queue.get(&run_id_2) else { continue };
+            for j in (i + 1)..run_ids.len() {
+                if matched_runs.contains(&run_ids[j]) {
+                    continue;
+                }
 
-            if self.can_match(&entry_1.run_info, &entry_2.run_info, entry_1.queued_at).await {
-                // Clone data before async call
-                let sender_1 = entry_1.sender.clone();
-                let sender_2 = entry_2.sender.clone();
-                let run_info_1 = entry_1.run_info.clone();
-                let run_info_2 = entry_2.run_info.clone();
-                
-                // Drop refs before await
-                drop(entry_1);
-                drop(entry_2);
+                let run_id_1 = run_ids[i];
+                let run_id_2 = run_ids[j];
 
-                match self.persistence.create_match(&run_info_1, &run_info_2).await {
-                    Ok(arena_match) => {
-                        let _ = sender_1.send(MatchResult::MatchFound(arena_match.clone())).await;
-                        let _ = sender_2.send(MatchResult::MatchFound(arena_match)).await;
+                // Get entries only when needed
+                let Some(entry_1) = self.queue.get(&run_id_1) else {
+                    continue;
+                };
+                let Some(entry_2) = self.queue.get(&run_id_2) else {
+                    continue;
+                };
 
-                        self.queue.remove(&run_id_1);
-                        self.queue.remove(&run_id_2);
+                if self
+                    .can_match(&entry_1.run_info, &entry_2.run_info, entry_1.queued_at)
+                    .await
+                {
+                    // Clone data before async call
+                    let sender_1 = entry_1.sender.clone();
+                    let sender_2 = entry_2.sender.clone();
+                    let run_info_1 = entry_1.run_info.clone();
+                    let run_info_2 = entry_2.run_info.clone();
 
-                        matched_runs.push(run_id_1);
-                        matched_runs.push(run_id_2);
-                        break;
-                    }
-                    Err(e) => {
-                        tracing::error!("Failed to create match: {}", e);
+                    // Drop refs before await
+                    drop(entry_1);
+                    drop(entry_2);
+
+                    match self
+                        .persistence
+                        .create_match(&run_info_1, &run_info_2)
+                        .await
+                    {
+                        Ok(arena_match) => {
+                            let _ = sender_1
+                                .send(MatchResult::MatchFound(arena_match.clone()))
+                                .await;
+                            let _ = sender_2.send(MatchResult::MatchFound(arena_match)).await;
+
+                            self.queue.remove(&run_id_1);
+                            self.queue.remove(&run_id_2);
+
+                            matched_runs.push(run_id_1);
+                            matched_runs.push(run_id_2);
+                            break;
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to create match: {}", e);
+                        }
                     }
                 }
             }
         }
     }
-}
 
     async fn can_match(
         &self,
@@ -145,10 +161,9 @@ impl Matchmaking {
             .persistence
             .have_runs_played(&run1.run_id, &run2.run_id)
             .await
+            && has_played
         {
-            if has_played {
-                return false;
-            }
+            return false;
         }
 
         // Expand range based on time in queue
@@ -169,7 +184,7 @@ impl Matchmaking {
             .queue
             .iter()
             .filter(|entry| now.duration_since(entry.queued_at) > timeout)
-            .map(|entry| entry.key().clone())
+            .map(|entry| *entry.key())
             .collect();
 
         for run_id in timed_out {

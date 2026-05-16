@@ -1,20 +1,24 @@
-use std::collections::HashMap;
-
 use async_trait::async_trait;
 use uuid::Uuid;
 
 use crate::{
-    adapters::repositories::{PostgresPersistence, arena::dao::{ArenaMatchDao, ArenaRunInfoDao}},
-    application::{
-        AppError, AppResult, repositories::arena::ArenaRepository,
+    adapters::repositories::postgres::{
+        PostgresArenaRepository,
+        arena_dao::{ArenaMatchDao, ArenaRunInfoDao},
     },
+    application::{AppError, AppResult, repositories::arena::ArenaRepository},
     domain::{
-        TimeFormat, arena::{arena_match::ArenaMatch, run::{ArenaRunInfo, Bucket}}, pokemon::Pokemon
+        arena::{
+            arena_match::ArenaMatch,
+            run::{ArenaRunInfo, Bucket},
+        },
+        pokemon::Pokemon,
+        time::TimeFormat,
     },
 };
 
 #[async_trait]
-impl ArenaRepository for PostgresPersistence {
+impl ArenaRepository for PostgresArenaRepository {
     async fn delete_unfinished_draft_runs(&self) -> AppResult<()> {
         sqlx::query!(
             r#"
@@ -29,11 +33,7 @@ impl ArenaRepository for PostgresPersistence {
         Ok(())
     }
 
-    async fn get_user_current_run(
-        &self,
-        username: &str,
-        pokedex: &'static HashMap<String, Pokemon>,
-    ) -> AppResult<Option<ArenaRunInfo>> {
+    async fn get_user_current_run(&self, username: &str) -> AppResult<Option<ArenaRunInfo>> {
         let mut tx = self.pool.begin().await?;
 
         let run_db = sqlx::query_as!(
@@ -65,11 +65,7 @@ impl ArenaRepository for PostgresPersistence {
                 let team = run_dao
                     .team
                     .iter()
-                    .map(|poke_id| {
-                        pokedex.get(poke_id).ok_or_else(|| {
-                            AppError::Database(format!("{} not in pokedex", poke_id))
-                        })
-                    })
+                    .map(|poke_id| self.pokemon_repository.get_by_id(poke_id))
                     .collect::<AppResult<Vec<&'static Pokemon>>>()?;
 
                 let matches_db = sqlx::query_as!(
@@ -121,7 +117,8 @@ impl ArenaRepository for PostgresPersistence {
 
                 Ok(Some(ArenaRunInfo {
                     run_id: run_dao.run_id,
-                    created_at: TimeFormat::try_from(run_dao.created_at).map_err(|err| AppError::Database(err.to_string()))?,
+                    created_at: TimeFormat::try_from(run_dao.created_at)
+                        .map_err(|err| AppError::Database(err.to_string()))?,
                     wins: run_dao.wins as u32,
                     losses: run_dao.losses as u32,
                     finished_draft: run_dao.finished_draft,
@@ -171,7 +168,7 @@ impl ArenaRepository for PostgresPersistence {
         ))
     }
 
-    async fn abandon_run(&self, run_id: &Uuid, username: &str, elo_change: i32) -> AppResult<()> {
+    async fn abandon_run(&self, run_id: &Uuid) -> AppResult<()> {
         let mut tx = self.pool.begin().await?;
 
         sqlx::query!(
@@ -184,21 +181,6 @@ impl ArenaRepository for PostgresPersistence {
         )
         .execute(&mut *tx)
         .await?;
-
-        // sqlx::query!(
-        //     r#"
-        // INSERT INTO leaderboards (meta, username, elo)
-        // VALUES ($1, $2, $3)
-        // ON CONFLICT (meta, username) 
-        // DO UPDATE SET 
-        //     elo = leaderboards.elo + EXCLUDED.elo
-        // "#,
-        //     META_STR,
-        //     username,
-        //     elo_change,
-        // )
-        // .execute(&mut *tx)
-        // .await?;
 
         tx.commit().await?;
 
@@ -236,7 +218,6 @@ impl ArenaRepository for PostgresPersistence {
     async fn get_run_options(
         &self,
         run_id: &Uuid,
-        pokedex: &'static HashMap<String, Pokemon>,
     ) -> AppResult<Option<(Bucket, Vec<&'static Pokemon>)>> {
         let row = sqlx::query!(
             r#"
@@ -258,11 +239,7 @@ impl ArenaRepository for PostgresPersistence {
             let pokemon_options = row
                 .pokemon_ids
                 .iter()
-                .map(|poke_id| {
-                    pokedex
-                        .get(poke_id)
-                        .ok_or_else(|| AppError::Database(format!("{} not in pokedex", poke_id)))
-                })
+                .map(|poke_id| self.pokemon_repository.get_by_id(poke_id))
                 .collect::<AppResult<Vec<&'static Pokemon>>>()?;
 
             Ok((bucket, pokemon_options))
@@ -276,7 +253,6 @@ impl ArenaRepository for PostgresPersistence {
         option_no: usize,
         pick_no: usize,
         num_picks: usize,
-        pokedex: &'static HashMap<String, Pokemon>,
     ) -> AppResult<(bool, Bucket, &'static Pokemon)> {
         let mut tx = self.pool.begin().await?;
 
@@ -338,9 +314,7 @@ impl ArenaRepository for PostgresPersistence {
         Ok((
             finished,
             bucket,
-            pokedex
-                .get(poke_id)
-                .ok_or_else(|| AppError::Database(format!("{} not in pokedex", poke_id)))?,
+            self.pokemon_repository.get_by_id(poke_id)?,
         ))
     }
 }

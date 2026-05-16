@@ -1,13 +1,13 @@
 use thiserror::Error;
 
-pub mod services;
 pub mod repositories;
+pub mod services;
 
 #[derive(Error, Debug)]
 pub enum AppError {
     #[error("Database error: {0}")]
     Database(String),
-    
+
     #[error("Internal error: {0}")]
     Internal(String),
 

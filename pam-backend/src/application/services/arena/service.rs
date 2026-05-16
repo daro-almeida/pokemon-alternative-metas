@@ -2,32 +2,38 @@ use std::{collections::HashMap, sync::Arc};
 
 use rand::seq::IteratorRandom;
 
-use crate::{application::{AppError, AppResult, repositories::arena::ArenaRepository, services::arena::config::ArenaConfig}, domain::{arena::{pick::Pick, run::ArenaRunInfo}, pokemon::Pokemon}};
+use crate::{
+    application::{
+        AppError, AppResult, repositories::arena::ArenaRepository,
+        services::arena::config::ArenaConfig,
+    },
+    domain::{
+        arena::{pick::Pick, run::ArenaRunInfo},
+        pokemon::Pokemon,
+    },
+};
 
 pub struct Arena {
-    pokedex: &'static HashMap<String, Pokemon>,
-    bucket_pools: HashMap<usize, Vec<&'static Pokemon>>,
-    persistence: Arc<dyn ArenaRepository>,
     config: ArenaConfig,
+    arena_repository: Arc<dyn ArenaRepository>,
+    bucket_pools: HashMap<usize, Vec<&'static Pokemon>>,
 }
 
 impl Arena {
     pub fn new(
-        pokedex: &'static HashMap<String, Pokemon>,
-        bucket_pools: HashMap<usize, Vec<&'static Pokemon>>,
-        persistence: Arc<dyn ArenaRepository>,
         config: ArenaConfig,
+        arena_repository: Arc<dyn ArenaRepository>,
+        bucket_pools: HashMap<usize, Vec<&'static Pokemon>>,
     ) -> Self {
         Self {
-            pokedex,
-            bucket_pools,
-            persistence,
             config,
+            arena_repository,
+            bucket_pools,
         }
     }
 
     pub async fn init(&self) -> AppResult<()> {
-        self.persistence.delete_unfinished_draft_runs().await?;
+        self.arena_repository.delete_unfinished_draft_runs().await?;
         Ok(())
     }
 
@@ -39,15 +45,8 @@ impl Arena {
     }
 
     pub async fn abandon_run(&self, username: &str) -> AppResult<()> {
-        if let Some(run_info) = self
-            .persistence
-            .get_user_current_run(username, self.pokedex)
-            .await?
-        {
-            // TODO calc elos
-            self.persistence
-                .abandon_run(&run_info.run_id, username, 0)
-                .await?;
+        if let Some(run_info) = self.arena_repository.get_user_current_run(username).await? {
+            self.arena_repository.abandon_run(&run_info.run_id).await?;
         }
         Ok(())
     }
@@ -61,13 +60,12 @@ impl Arena {
         }
 
         let (finished, bucket, pokemon) = self
-            .persistence
+            .arena_repository
             .pick_option(
                 &run_info.run_id,
                 option_no,
                 run_info.team.len() + 1,
                 self.config.num_picks,
-                self.pokedex,
             )
             .await?;
 
@@ -79,13 +77,9 @@ impl Arena {
     }
 
     async fn get_run_info(&self, username: &str) -> AppResult<ArenaRunInfo> {
-        match self
-            .persistence
-            .get_user_current_run(username, self.pokedex)
-            .await?
-        {
+        match self.arena_repository.get_user_current_run(username).await? {
             Some(run) => Ok(run),
-            None => self.persistence.create_run(username).await,
+            None => self.arena_repository.create_run(username).await,
         }
     }
 
@@ -95,8 +89,8 @@ impl Arena {
         }
 
         if let Some((_, options)) = self
-            .persistence
-            .get_run_options(&run_info.run_id, self.pokedex)
+            .arena_repository
+            .get_run_options(&run_info.run_id)
             .await?
         {
             Ok(Some(Pick {
@@ -104,7 +98,7 @@ impl Arena {
                 options,
             }))
         } else {
-            Ok(Some(self.generate_pick(&run_info).await?))
+            Ok(Some(self.generate_pick(run_info).await?))
         }
     }
 
@@ -120,7 +114,7 @@ impl Arena {
                 .team_buckets
                 .iter()
                 .fold(HashMap::new(), |mut map, bucket| {
-                    *map.entry((*bucket).try_into().unwrap()).or_insert(0usize) += 1;
+                    *map.entry(*bucket).or_insert(0usize) += 1;
                     map
                 });
 
@@ -129,8 +123,7 @@ impl Arena {
             .quotas
             .iter()
             .enumerate()
-            .map(|(b, q)| std::iter::repeat_n(b, q - bucket_counts.get(&b).unwrap_or(&0usize)))
-            .flatten()
+            .flat_map(|(b, q)| std::iter::repeat_n(b, q - bucket_counts.get(&b).unwrap_or(&0usize)))
             .choose(&mut rand::rng())
             .ok_or_else(|| {
                 AppError::Internal("No quotas left (should be unreachable)".to_owned())
@@ -145,7 +138,7 @@ impl Arena {
             .copied()
             .choose_multiple(&mut rand::rng(), self.config.options_per_bucket[bucket]);
 
-        self.persistence
+        self.arena_repository
             .insert_options(&run_info.run_id, bucket, &options)
             .await?;
 

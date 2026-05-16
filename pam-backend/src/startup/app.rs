@@ -1,9 +1,17 @@
-use axum::{Router, http::{self, header::{AUTHORIZATION, CONTENT_TYPE}}};
+use axum::{
+    Router,
+    http::{
+        self,
+        header::{AUTHORIZATION, CONTENT_TYPE},
+    },
+};
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use uuid::Uuid;
 
-use crate::{adapters::{self, http::app_state::AppState}, infra::setup::init_tracing};
-
+use crate::{
+    adapters::{self, http::app_state::AppState},
+    startup::init_tracing,
+};
 
 pub fn create_app(app_state: AppState) -> Router {
     init_tracing();

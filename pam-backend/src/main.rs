@@ -1,12 +1,11 @@
 use dotenvy::dotenv;
 
+use crate::startup::{app::create_app, init_app_state};
+
 pub mod adapters;
 pub mod application;
 pub mod domain;
-pub mod infra;
-
-use infra::app::create_app;
-use infra::setup::init_app_state;
+pub mod startup;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

@@ -1,8 +1,15 @@
 use std::sync::Arc;
 
-use axum::{Json, extract::{Path, State}, response::IntoResponse};
+use axum::{
+    Json,
+    extract::{Path, State},
+    response::IntoResponse,
+};
 
-use crate::{adapters::http::routes::arena::dto::ChoosePickRequest, application::{AppResult, services::arena::service::Arena}};
+use crate::{
+    adapters::http::routes::arena::dto::ChoosePickRequest,
+    application::{AppResult, services::arena::service::Arena},
+};
 
 pub(super) async fn show_run(
     State(arena): State<Arc<Arena>>,

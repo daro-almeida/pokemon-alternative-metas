@@ -1,7 +1,7 @@
 use serde::Serialize;
 use uuid::Uuid;
 
-use crate::domain::{TimeFormat, arena::arena_match::ArenaMatch, pokemon::Pokemon};
+use crate::domain::{arena::arena_match::ArenaMatch, pokemon::Pokemon, time::TimeFormat};
 
 pub type Bucket = usize;
 

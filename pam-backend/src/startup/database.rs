@@ -1,4 +1,3 @@
-
 use sqlx::{Pool, Postgres, postgres::PgPoolOptions};
 
 pub async fn init_pg_db() -> anyhow::Result<Pool<Postgres>> {
