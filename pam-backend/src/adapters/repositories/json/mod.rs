@@ -30,7 +30,16 @@ fn load_pokedex() -> anyhow::Result<HashMap<String, Pokemon>> {
                 Err(e) => return Some(Err(anyhow::anyhow!(e))),
             };
 
-            let pokemon = pokemon_dao.into();
+            let pokemon = Pokemon {
+                id: id.clone(),
+                name: pokemon_dao.name,
+                types: (
+                    pokemon_dao.types.get(0).cloned().unwrap_or_default(),
+                    pokemon_dao.types.get(1).cloned(),
+                ),
+                base_species: pokemon_dao.base_species,
+                evos: pokemon_dao.evos,
+            };
 
             Some(Ok((id, pokemon)))
         })

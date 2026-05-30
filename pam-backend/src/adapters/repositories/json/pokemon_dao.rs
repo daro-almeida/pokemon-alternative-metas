@@ -5,11 +5,11 @@ use crate::domain::pokemon::Pokemon;
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct PokemonDao {
-    name: String,
-    types: Vec<String>,
-    base_species: Option<String>,
+    pub(crate) name: String,
+    pub(crate) types: Vec<String>,
+    pub(crate) base_species: Option<String>,
     #[serde(default)]
-    evos: Vec<String>,
+    pub(crate) evos: Vec<String>,
 }
 
 impl From<PokemonDao> for Pokemon {
