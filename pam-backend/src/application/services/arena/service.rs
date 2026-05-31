@@ -76,7 +76,7 @@ impl Arena {
         self.get_pick(&run_info).await
     }
 
-    async fn get_run_info(&self, username: &str) -> AppResult<ArenaRunInfo> {
+    pub(crate) async fn get_run_info(&self, username: &str) -> AppResult<ArenaRunInfo> {
         match self.arena_repository.get_user_current_run(username).await? {
             Some(run) => Ok(run),
             None => self.arena_repository.create_run(username).await,

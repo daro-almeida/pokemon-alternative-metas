@@ -9,6 +9,8 @@ use crate::{
     },
     startup::{arena::init_arena_service, database::init_pg_db},
 };
+use crate::adapters::repositories::postgres::PostgresMatchmakingRepository;
+use crate::startup::matchmaking::init_matchmaking_service;
 
 pub mod app;
 pub mod arena;
@@ -21,12 +23,14 @@ pub async fn init_app_state() -> anyhow::Result<AppState> {
 
     let pokemon_repository = Arc::new(JsonPokemonRepository::new());
     let arena_repository = Arc::new(PostgresArenaRepository::new(
-        db_pool,
+        db_pool.clone(),
         pokemon_repository.clone(),
     ));
     let arena = init_arena_service(pokemon_repository, arena_repository)?;
+    let matchmaking_repository = Arc::new(PostgresMatchmakingRepository::new(db_pool));
+    let matchmaking = init_matchmaking_service(matchmaking_repository)?;
 
-    Ok(AppState::new(arena))
+    Ok(AppState::new(arena, matchmaking))
 }
 
 pub fn init_tracing() {

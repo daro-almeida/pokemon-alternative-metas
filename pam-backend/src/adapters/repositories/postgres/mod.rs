@@ -6,6 +6,7 @@ use crate::application::repositories::pokemon::PokemonRepository;
 
 pub mod arena_dao;
 pub mod arena_repository;
+pub mod matchmaking_repository;
 
 pub struct PostgresArenaRepository {
     pool: Pool<Postgres>,
@@ -18,5 +19,15 @@ impl PostgresArenaRepository {
             pool,
             pokemon_repository,
         }
+    }
+}
+
+pub struct PostgresMatchmakingRepository {
+    pool: Pool<Postgres>,
+}
+
+impl PostgresMatchmakingRepository {
+    pub fn new(pool: Pool<Postgres>) -> Self {
+        Self { pool }
     }
 }
