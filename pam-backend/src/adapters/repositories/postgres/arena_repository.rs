@@ -33,13 +33,65 @@ impl ArenaRepository for PostgresArenaRepository {
         Ok(())
     }
 
+    async fn create_run(&self, username: &str) -> AppResult<ArenaRunInfo> {
+        let mut tx = self.pool.begin().await?;
+
+        let (run_id, created_at) = sqlx::query!(
+            r#"
+        INSERT INTO runs (username)
+        VALUES ($1)
+        RETURNING run_id, created_at
+        "#,
+            username
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .map(|row| (row.run_id, row.created_at))?;
+
+        sqlx::query!(
+            r#"
+        INSERT INTO arena_runs (run_id)
+        VALUES ($1)
+        "#,
+            run_id
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(ArenaRunInfo::new(
+            run_id,
+            TimeFormat::try_from(created_at).map_err(|err| AppError::Database(err.to_string()))?,
+        ))
+    }
+
+    async fn abandon_run(&self, run_id: &Uuid) -> AppResult<()> {
+        let mut tx = self.pool.begin().await?;
+
+        sqlx::query!(
+            r#"
+        UPDATE runs
+        SET finished = TRUE
+        WHERE run_id = $1
+        "#,
+            run_id
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+
     async fn get_user_current_run(&self, username: &str) -> AppResult<Option<ArenaRunInfo>> {
         let mut tx = self.pool.begin().await?;
 
         let run_db = sqlx::query_as!(
             ArenaRunInfoDao,
             r#"
-            SELECT 
+            SELECT
                 r.run_id,
                 r.username,
                 r.created_at,
@@ -135,56 +187,36 @@ impl ArenaRepository for PostgresArenaRepository {
         result
     }
 
-    async fn create_run(&self, username: &str) -> AppResult<ArenaRunInfo> {
-        let mut tx = self.pool.begin().await?;
-
-        let (run_id, created_at) = sqlx::query!(
+    async fn get_run_options(
+        &self,
+        run_id: &Uuid,
+    ) -> AppResult<Option<(Bucket, Vec<&'static Pokemon>)>> {
+        let row = sqlx::query!(
             r#"
-        INSERT INTO runs (username)
-        VALUES ($1)
-        RETURNING run_id, created_at
-        "#,
-            username
-        )
-        .fetch_one(&mut *tx)
-        .await
-        .map(|row| (row.run_id, row.created_at))?;
-
-        sqlx::query!(
-            r#"
-        INSERT INTO arena_runs (run_id)
-        VALUES ($1)
-        "#,
-            run_id
-        )
-        .execute(&mut *tx)
-        .await?;
-
-        tx.commit().await?;
-
-        Ok(ArenaRunInfo::new(
-            run_id,
-            TimeFormat::try_from(created_at).map_err(|err| AppError::Database(err.to_string()))?,
-        ))
-    }
-
-    async fn abandon_run(&self, run_id: &Uuid) -> AppResult<()> {
-        let mut tx = self.pool.begin().await?;
-
-        sqlx::query!(
-            r#"
-        UPDATE runs
-        SET finished = TRUE
+        SELECT
+            bucket,
+            ARRAY_AGG(pokemon ORDER BY option_no) as "pokemon_ids!"
+        FROM arena_picks
         WHERE run_id = $1
+        GROUP BY bucket
+        LIMIT 1
         "#,
             run_id
         )
-        .execute(&mut *tx)
+        .fetch_optional(&self.pool)
         .await?;
 
-        tx.commit().await?;
+        row.map(|row| {
+            let bucket = row.bucket as Bucket;
+            let pokemon_options = row
+                .pokemon_ids
+                .iter()
+                .map(|poke_id| self.pokemon_repository.get_by_id(poke_id))
+                .collect::<AppResult<Vec<&'static Pokemon>>>()?;
 
-        Ok(())
+            Ok((bucket, pokemon_options))
+        })
+        .transpose()
     }
 
     async fn insert_options(
@@ -213,38 +245,6 @@ impl ArenaRepository for PostgresArenaRepository {
         .await?;
 
         Ok(())
-    }
-
-    async fn get_run_options(
-        &self,
-        run_id: &Uuid,
-    ) -> AppResult<Option<(Bucket, Vec<&'static Pokemon>)>> {
-        let row = sqlx::query!(
-            r#"
-        SELECT 
-            bucket,
-            ARRAY_AGG(pokemon ORDER BY option_no) as "pokemon_ids!"
-        FROM arena_picks
-        WHERE run_id = $1
-        GROUP BY bucket
-        LIMIT 1
-        "#,
-            run_id
-        )
-        .fetch_optional(&self.pool)
-        .await?;
-
-        row.map(|row| {
-            let bucket = row.bucket as Bucket;
-            let pokemon_options = row
-                .pokemon_ids
-                .iter()
-                .map(|poke_id| self.pokemon_repository.get_by_id(poke_id))
-                .collect::<AppResult<Vec<&'static Pokemon>>>()?;
-
-            Ok((bucket, pokemon_options))
-        })
-        .transpose()
     }
 
     async fn pick_option(
