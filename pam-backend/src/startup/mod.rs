@@ -2,6 +2,8 @@ use std::{fs::File, sync::Arc};
 
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
+use crate::adapters::repositories::postgres::PostgresMatchmakingRepository;
+use crate::startup::matchmaking::init_matchmaking_service;
 use crate::{
     adapters::{
         http::app_state::AppState,
@@ -9,8 +11,6 @@ use crate::{
     },
     startup::{arena::init_arena_service, database::init_pg_db},
 };
-use crate::adapters::repositories::postgres::PostgresMatchmakingRepository;
-use crate::startup::matchmaking::init_matchmaking_service;
 
 pub mod app;
 pub mod arena;

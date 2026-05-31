@@ -33,8 +33,8 @@ impl MatchmakingRepository for PostgresMatchmakingRepository {
 
         let opponent = sqlx::query_scalar!(
             r#"
-                        SELECT username FROM runs WHERE run_id = $1
-                        "#,
+            SELECT username FROM runs WHERE run_id = $1
+            "#,
             run_info_2.run_id
         )
         .fetch_one(&mut *tx)
