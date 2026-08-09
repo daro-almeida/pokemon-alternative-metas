@@ -37,7 +37,7 @@ export function PickCard({ pokemon, onPick, disabled }: PickCardProps) {
               type && (
                 <div key={i} className="relative w-8 h-8 lg:w-10 lg:h-10">
                   <Image
-                    src={`https://play.pokemonshowdown.com/sprites/types/${type}.png`}
+                    src={`/images/types/${type}.png`}
                     alt={type}
                     fill
                     className="object-contain"

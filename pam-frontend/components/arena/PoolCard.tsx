@@ -29,7 +29,7 @@ export function PoolCard({ pokemon }: PoolCardProps) {
               type && (
                 <div key={i} className="relative w-8 h-5 shrink-0">
                   <Image
-                    src={`https://play.pokemonshowdown.com/sprites/types/${type}.png`}
+                    src={`/images/types/${type}.png`}
                     alt={type}
                     fill
                     className="object-contain"

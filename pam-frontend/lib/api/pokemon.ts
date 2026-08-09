@@ -7,7 +7,6 @@ function normalize(str: string) {
     .replace(" ", "")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9 \-]/g, "");
-  // wo-chien
 }
 
 export function home_centered_sprite(pokemon: Pokemon) {
@@ -49,7 +48,7 @@ export function home_centered_sprite(pokemon: Pokemon) {
         return normalized_name;
     }
   }
-  return `https://play.pokemonshowdown.com/sprites/home-centered/${process_exceptions(
+  return `/images/pokemon/home-centered/${process_exceptions(
     normalize(pokemon.name),
   )}.png`;
 }
