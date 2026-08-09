@@ -25,4 +25,3 @@ pub struct ArenaMatchDao {
     pub run_2_wins: i32,
     pub winner_run_id: Option<Uuid>,
 }
-
