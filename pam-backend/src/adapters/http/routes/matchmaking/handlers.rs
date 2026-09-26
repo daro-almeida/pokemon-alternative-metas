@@ -10,20 +10,20 @@ use futures::stream::Stream;
 use std::{convert::Infallible, sync::Arc, time::Duration};
 use uuid::Uuid;
 
-use crate::application::{
-    AppResult,
-    services::{
-        arena::service::Arena,
-        matchmaking::{MatchResult, Matchmaking},
-    },
-};
+use crate::application::{AppResult, services::{
+    arena::service::Arena,
+    matchmaking::{MatchResult, Matchmaking},
+}, AppError};
 
 pub(crate) async fn queue_match(
     State(matchmaking): State<Arc<Matchmaking>>,
     State(arena): State<Arc<Arena>>,
     Path(username): Path<String>,
 ) -> AppResult<Sse<impl Stream<Item = Result<Event, Infallible>>>> {
-    let run_info = arena.get_run_info(&username).await?;
+    let (run_info, pick) = arena.show_run(&username).await?;
+    if pick.is_some() {
+        return Err(AppError::NotFound("Run has not finished draft phase.".to_owned()))
+    }
 
     let mut rx = matchmaking.queue_for_match(run_info).await?;
 

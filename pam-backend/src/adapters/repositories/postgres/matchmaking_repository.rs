@@ -9,10 +9,6 @@ use crate::{
 
 #[async_trait]
 impl MatchmakingRepository for PostgresMatchmakingRepository {
-    async fn get_matches(&self, username: &str) -> AppResult<Vec<ArenaMatch>> {
-        todo!()
-    }
-
     async fn create_match(
         &self,
         run_info_1: &ArenaRunInfo,
@@ -67,12 +63,7 @@ impl MatchmakingRepository for PostgresMatchmakingRepository {
 
         Ok(result.unwrap_or(false))
     }
-    async fn abandon_match(
-        &self,
-        match_id: &Uuid,
-        username: &str,
-        elo_change: i32,
-    ) -> AppResult<()> {
+    async fn abandon_match(&self, match_id: &Uuid, run_id: &Uuid) -> AppResult<()> {
         todo!()
     }
 }
