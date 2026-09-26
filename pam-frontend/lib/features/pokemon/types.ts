@@ -1,4 +1,8 @@
-import { Pokemon } from "../types/pokemon";
+export type Pokemon = {
+  id: string;
+  name: string;
+  types: [string, string?];
+};
 
 function normalize(str: string) {
   return str

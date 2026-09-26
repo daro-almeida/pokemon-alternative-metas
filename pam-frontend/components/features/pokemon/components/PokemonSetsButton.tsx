@@ -1,7 +1,7 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import { Pokemon } from "@/lib/utils";
+import { Button } from "@/components/ui/";
+import { Pokemon } from "@/lib/features/pokemon/types";
 
 interface PokemonInfoButtonProps {
   pokemon: Pokemon;

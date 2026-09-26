@@ -89,4 +89,6 @@ export {
   CardAction,
   CardDescription,
   CardContent,
-}
+};
+
+export default Card;

@@ -1,7 +1,6 @@
 import Image from "next/image";
-import { PokemonSetsButton } from "@/components/PokemonSetsButton";
-import { home_centered_sprite } from "@/lib/api/pokemon";
-import { Pokemon } from "@/lib/types/pokemon";
+import { PokemonSetsButton } from "@/components/features/pokemon/components/PokemonSetsButton";
+import { Pokemon, home_centered_sprite } from "@/lib/features/pokemon/types";
 
 interface PoolCardProps {
   pokemon: Pokemon;
@@ -46,3 +45,5 @@ export function PoolCard({ pokemon }: PoolCardProps) {
     </div>
   );
 }
+
+export default PoolCard;

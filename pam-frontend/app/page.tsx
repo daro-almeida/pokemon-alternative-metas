@@ -1,17 +1,17 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { metas } from "@/data/metas";
+import { metas } from "@/lib/features/metas/types";
 import Link from "next/link";
 
 export default function Home() {
   return (
     <section className="text-center space-y-8 py-20">
-
       <div className="space-y-4">
         <h1 className="text-5xl font-bold tracking-tight">
           Pokémon Alternative Metas
         </h1>
         <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-          A collection of Pokémon alternative metas I came up with, including matchmaking system and ladders.
+          A collection of Pokémon alternative metas I came up with, including
+          matchmaking system and ladders.
         </p>
       </div>
 

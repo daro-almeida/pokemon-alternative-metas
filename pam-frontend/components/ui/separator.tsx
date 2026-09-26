@@ -25,4 +25,6 @@ function Separator({
   )
 }
 
-export { Separator }
+export { Separator };
+
+export default Separator;

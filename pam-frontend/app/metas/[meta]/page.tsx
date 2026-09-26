@@ -1,9 +1,11 @@
-import { Button } from "@/components/ui/button";
-import { metas } from "@/data/metas";
+import { Button } from "@/components/ui/";
+import { metas } from "@/lib/features/metas/types";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 
-export default async function Page(props: { params: Promise<{ meta: string }> }) {
+export default async function Page(props: {
+  params: Promise<{ meta: string }>;
+}) {
   const params = await props.params;
   const meta = metas.find((m) => m.meta === params.meta);
 
@@ -14,7 +16,9 @@ export default async function Page(props: { params: Promise<{ meta: string }> })
       <h1 className="text-4xl font-bold tracking-tight">{meta.title}</h1>
       <p className="text-muted-foreground text-lg">{meta.large_description}</p>
 
-      <Button asChild><Link href={`/play_${meta.meta}`}>Play</Link></Button>
+      <Button asChild>
+        <Link href={`/play-${meta.meta}`}>Play</Link>
+      </Button>
     </section>
   );
 }

@@ -1,4 +1,4 @@
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/";
 
 interface MatchHistoryItemProps {
   opponent: string;
@@ -36,3 +36,5 @@ export function MatchHistoryItem({
     </div>
   );
 }
+
+export default MatchHistoryItem;

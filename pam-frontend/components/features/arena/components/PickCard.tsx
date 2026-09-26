@@ -1,9 +1,8 @@
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/";
 import Image from "next/image";
-import { PokemonSetsButton } from "@/components/PokemonSetsButton";
-import { home_centered_sprite } from "@/lib/api/pokemon";
-import { Pokemon } from "@/lib/types/pokemon";
+import { PokemonSetsButton } from "@/components/features/pokemon/components/PokemonSetsButton";
+import { Pokemon, home_centered_sprite } from "@/lib/features/pokemon/types";
 
 interface PickCardProps {
   pokemon: Pokemon;
@@ -57,3 +56,5 @@ export function PickCard({ pokemon, onPick, disabled }: PickCardProps) {
     </Card>
   );
 }
+
+export default PickCard;

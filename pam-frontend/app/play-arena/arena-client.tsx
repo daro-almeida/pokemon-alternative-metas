@@ -9,16 +9,15 @@ import {
 } from "@/components/ui/card";
 import { useState, useTransition } from "react";
 import { abandonRun, getArenaRun, makePick } from "./actions";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
+import { Button, Badge, ScrollArea, Separator } from "@/components/ui/";
 import { useRouter } from "next/navigation";
-import { PoolCard } from "@/components/arena/PoolCard";
-import { PickCard } from "@/components/arena/PickCard";
-import { MatchHistoryItem } from "@/components/arena/MatchHistoryItem";
-import { Pokemon } from "@/lib/types/pokemon";
-import { ARENA_NUM_PICKS } from "@/lib/constants";
+import {
+  PoolCard,
+  PickCard,
+  MatchHistoryItem,
+} from "@/components/features/arena/components/";
+import { Pokemon } from "@/lib/features/pokemon/types";
+import { ARENA_NUM_PICKS } from "@/lib/features/arena/constants";
 
 interface Pick {
   pick_num: number;
